@@ -11,6 +11,15 @@ const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 export const supabaseConfigured = Boolean(url && key);
 export const supabase: SupabaseClient | null = supabaseConfigured ? createClient(url!, key!) : null;
 
+/** Supabase errors are plain objects, so pull out a readable message. */
+export function syncMessage(e: unknown): string {
+  const o = e as { message?: string; hint?: string; code?: string } | null;
+  const msg = o?.message || "Sync failed";
+  return o?.code === "PGRST205" || /relation .* does not exist|schema cache/i.test(msg)
+    ? `${msg} — run supabase/schema.sql in the Supabase SQL editor.`
+    : msg;
+}
+
 export async function signInWithGoogle() {
   if (!supabase) throw new Error("Supabase is not configured. Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.");
   const { error } = await supabase.auth.signInWithOAuth({

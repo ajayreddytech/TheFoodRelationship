@@ -5,7 +5,7 @@ import { persist } from "zustand/middleware";
 import { FAQS, Faq, GUIDE_SECTIONS, GuideSection, PROPORTIONS, RECIPE_CATEGORIES, RECIPE_TIPS, RecipeCategory, TRY_IDEAS, WEEK_PLAN } from "./guide";
 import type { FoodItem } from "./types";
 import { todayISO } from "./dates";
-import { pullContent, pushContent } from "./supabase";
+import { pullContent, pushContent, syncMessage } from "./supabase";
 import { useStore } from "./store";
 
 const clone = <T,>(v: T): T => JSON.parse(JSON.stringify(v));
@@ -68,7 +68,7 @@ function schedulePush() {
     if (!uid) return;
     pushContent(uid, pick(useContent.getState())).then(
       () => useStore.setState({ syncError: null }),
-      (e: unknown) => useStore.setState({ syncError: e instanceof Error ? e.message : "Sync failed" }),
+      (e: unknown) => useStore.setState({ syncError: syncMessage(e) }),
     );
   }, 500);
 }

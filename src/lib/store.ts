@@ -3,7 +3,7 @@ import { persist } from "zustand/middleware";
 import type { CookedBatch, DailyLog, MealBucket, MealEntry, FoodItem, Palette, Profile, Theme, WeightLog } from "./types";
 import { emptyLog, scaleItem, sumItems, todayISO, uid } from "./dates";
 import {
-  RemoteData, deleteRemoteBatch, deleteRemoteDraft, deleteRemoteLog, deleteRemoteWeight, pullDrafts, pushBatch, pushDraft, pushLog, pushProfile, pushWeight,
+  RemoteData, deleteRemoteBatch, deleteRemoteDraft, deleteRemoteLog, deleteRemoteWeight, pullDrafts, pushBatch, pushDraft, pushLog, pushProfile, pushWeight, syncMessage,
 } from "./supabase";
 
 export type View = "log" | "plan" | "calendar" | "insights" | "nutrients" | "recipes" | "guide" | "weight" | "settings";
@@ -64,7 +64,7 @@ interface State {
 const sync = (set: (p: Partial<State>) => void, fn: () => Promise<unknown>) =>
   fn().then(
     () => set({ syncError: null }),
-    (e: unknown) => set({ syncError: e instanceof Error ? e.message : "Sync failed" }),
+    (e: unknown) => set({ syncError: syncMessage(e) }),
   );
 
 const now = () => new Date().toISOString();
@@ -256,7 +256,7 @@ export const useStore = create<State>()(
             if (l.updatedAt && (!r || l.updatedAt > (r.updatedAt ?? ""))) await pushDraft(u, l);
           }
         } catch (e) {
-          set({ syncError: e instanceof Error ? e.message : "Sync failed" });
+          set({ syncError: syncMessage(e) });
         }
       },
 
