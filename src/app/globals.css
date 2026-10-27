@@ -1,0 +1,58 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg: 244 250 246;
+  --surface: 255 255 255;
+  --muted: 232 242 236;
+  --fg: 20 40 30;
+  --subtle: 100 120 110;
+  --line: 214 228 219;
+  --brand: 16 185 129;
+  --accent: 245 158 11;
+  --good: 34 197 94;
+  --mid: 250 204 21;
+  --bad: 239 68 68;
+}
+.dark {
+  color-scheme: dark;
+  --bg: 10 20 16;
+  --surface: 20 33 27;
+  --muted: 29 46 38;
+  --fg: 232 245 238;
+  --subtle: 148 170 158;
+  --line: 42 62 52;
+}
+[data-palette="crimson"] { --brand: 225 29 72; --accent: 249 115 22; }
+[data-palette="amber"] { --brand: 217 119 6; --accent: 16 185 129; }
+
+body {
+  background: rgb(var(--bg));
+  color: rgb(var(--fg));
+  transition: background-color 0.3s, color 0.3s;
+}
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background:
+    radial-gradient(600px circle at 90% 0%, rgb(var(--brand) / 0.15), transparent 60%),
+    radial-gradient(500px circle at 0% 100%, rgb(var(--accent) / 0.12), transparent 60%);
+}
+
+select { color: rgb(var(--fg)); }
+select option, select optgroup {
+  background-color: rgb(var(--surface));
+  color: rgb(var(--fg));
+}
+
+@layer components {
+  .card { @apply rounded-2xl border border-line bg-surface p-4 shadow-sm sm:p-5; }
+  .btn { @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 text-sm font-medium transition active:scale-95 disabled:opacity-50; }
+  .btn-primary { @apply btn bg-brand text-white hover:brightness-110; }
+  .btn-ghost { @apply btn border border-line bg-surface hover:bg-muted; }
+  .input { @apply w-full rounded-xl border border-line bg-surface px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand/50; }
+  .label { @apply mb-1 block text-xs font-medium text-subtle; }
+}

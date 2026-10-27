@@ -1,0 +1,49 @@
+"use client";
+
+import { BookOpen, Calendar, CalendarCheck, CookingPot, ClipboardList, FlaskConical, LineChart, Scale, Settings } from "lucide-react";
+import { useStore, View } from "@/lib/store";
+
+const ITEMS: { id: View; label: string; Icon: typeof Settings }[] = [
+  { id: "log", label: "Log", Icon: ClipboardList },
+  { id: "plan", label: "Meal Plan", Icon: CalendarCheck },
+  { id: "calendar", label: "Calendar / History", Icon: Calendar },
+  { id: "insights", label: "Insights & Graphs", Icon: LineChart },
+  { id: "nutrients", label: "Nutrient Breakdown", Icon: FlaskConical },
+  { id: "weight", label: "Weight Tracking", Icon: Scale },
+  { id: "recipes", label: "Recipes & Meal Prep", Icon: CookingPot },
+  { id: "guide", label: "Guide", Icon: BookOpen },
+  { id: "settings", label: "Settings", Icon: Settings },
+];
+
+export function Dock() {
+  const view = useStore((s) => s.view);
+  const setView = useStore((s) => s.setView);
+
+  return (
+    <nav
+      aria-label="Primary"
+      className="fixed bottom-3 left-1/2 z-40 flex -translate-x-1/2 gap-1 rounded-2xl border border-line bg-surface/90 p-1.5 shadow-dock backdrop-blur md:bottom-auto md:left-4 md:top-1/2 md:-translate-y-1/2 md:translate-x-0 md:flex-col md:p-2"
+    >
+      {ITEMS.map(({ id, label, Icon }) => {
+        const active = view === id;
+        return (
+          <div key={id} className={`group relative ${id === "settings" ? "md:mt-3 md:border-t md:border-line md:pt-3" : ""}`}>
+            <button
+              onClick={() => setView(id)}
+              aria-label={label}
+              aria-current={active ? "page" : undefined}
+              className={`grid h-11 w-11 place-items-center rounded-xl transition active:scale-90 ${
+                active ? "bg-brand text-white shadow-lg shadow-brand/30" : "text-subtle hover:bg-muted hover:text-fg"
+              }`}
+            >
+              <Icon size={20} />
+            </button>
+            <span className="pointer-events-none absolute left-full top-1/2 ml-3 hidden -translate-y-1/2 whitespace-nowrap rounded-lg bg-fg px-2 py-1 text-xs text-bg opacity-0 transition group-hover:opacity-100 md:block">
+              {label}
+            </span>
+          </div>
+        );
+      })}
+    </nav>
+  );
+}
