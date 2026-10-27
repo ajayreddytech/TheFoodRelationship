@@ -4,12 +4,13 @@ import { useMemo, useState } from "react";
 import { AlertOctagon, AlertTriangle, CheckCircle2, ChevronDown, Flame, Lightbulb, Microscope, Info } from "lucide-react";
 import { useStore } from "@/lib/store";
 import { windowFor, Gran } from "@/lib/period";
-import { todayISO } from "@/lib/dates";
+import { todayISO, datesBetween } from "@/lib/dates";
 import { aggregateNutrients, dietaryInsights, nutrientStatus } from "@/lib/analytics";
 import { calcAge } from "@/lib/calc";
-import { NUTRIENTS, NutrientGroup } from "@/lib/nutrients";
+import { NUTRIENTS, NutrientDef, NutrientGroup } from "@/lib/nutrients";
 import { motion } from "framer-motion";
 import { fmt, PageHeader, PeriodControls, Section } from "./ui";
+import { SourcesModal } from "./SourcesModal";
 
 const GROUPS: NutrientGroup[] = ["Macros", "Fats", "Vitamins", "Minerals", "Other"];
 export const TONE = {
@@ -22,12 +23,15 @@ export function NutrientsView() {
   const { logs, profile } = useStore();
   const [gran, setGran] = useState<Gran>("day");
   const [openTone, setOpenTone] = useState<Record<string, boolean>>({});
+  const [closed, setClosed] = useState<Record<string, boolean>>({});
+  const [src, setSrc] = useState<NutrientDef | null>(null);
   const [anchor, setAnchor] = useState(todayISO());
   const w = windowFor(gran, anchor, 1);
   const today = todayISO();
   const to = w.to > today ? today : w.to;
 
   const aggs = useMemo(() => aggregateNutrients(logs, w.from, to, profile), [logs, w.from, to, profile]);
+  const periodItems = useMemo(() => datesBetween(w.from, to).flatMap((d) => (logs[d]?.meals ?? []).flatMap((m) => m.items)), [logs, w.from, to]);
   const insights = useMemo(() => dietaryInsights(aggs), [aggs]);
   const days = aggs[0]?.days ?? 0;
   const age = calcAge(profile.dob);
@@ -82,8 +86,10 @@ export function NutrientsView() {
           {GROUPS.map((g) => {
             const defs = NUTRIENTS.filter((n) => n.group === g);
             if (!defs.length) return null;
+            const isClosed = !!closed[g];
             return (
-              <Section key={g} title={g} icon={<Microscope size={18} />}>
+              <Section key={g} title={g} icon={<Microscope size={18} />} collapsed={isClosed}
+                right={<button aria-label={`${isClosed ? "Expand" : "Collapse"} ${g}`} aria-expanded={!isClosed} className="btn-ghost !p-2" onClick={() => setClosed((c) => ({ ...c, [g]: !c[g] }))}><ChevronDown size={16} className={`transition ${isClosed ? "" : "rotate-180"}`} /></button>}>
                 <div className="grid gap-3 md:grid-cols-2">
                   {defs.map((n) => {
                     const a = aggs.find((x) => x.key === n.key)!;
@@ -91,7 +97,9 @@ export function NutrientsView() {
                     const t = TONE[nutrientStatus(n.limit, ratio)];
                     const fill = Math.min(ratio, SCALE) / SCALE;
                     return (
-                      <div key={n.key} className="rounded-2xl border border-line bg-muted/30 p-3">
+                      <div key={n.key} role="button" tabIndex={0} aria-label={`${n.label}: show top sources`} onClick={() => setSrc(n)}
+                        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setSrc(n); } }}
+                        className="cursor-pointer rounded-2xl border border-line bg-muted/30 p-3 transition hover:border-brand/50">
                         <div className="flex items-center justify-between gap-2">
                           <span className="font-medium">{n.label}{n.limit && <span className="ml-1 text-[10px] text-subtle">(limit)</span>}</span>
                           <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${t.chip}`}>{t.status} · {Math.round(ratio * 100)}%</span>
@@ -109,6 +117,7 @@ export function NutrientsView() {
           })}
         </>
       )}
+      <SourcesModal nutrient={src} items={periodItems} subtitle={w.label} perDay={days} onClose={() => setSrc(null)} />
     </div>
   );
 }

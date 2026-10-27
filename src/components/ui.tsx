@@ -1,6 +1,7 @@
 "use client";
 
 import { ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { motion } from "framer-motion";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { Gran, GRANS, PeriodWindow, canGoNext, shiftAnchor, windowFor } from "@/lib/period";
@@ -19,10 +20,10 @@ export function PageHeader({ title, subtitle, right }: { title: string; subtitle
 }
 
 /** A clearly bounded block with a tinted header strip. */
-export function Section({ title, subtitle, icon, right, children, className = "" }: { title: string; subtitle?: string; icon?: ReactNode; right?: ReactNode; children: ReactNode; className?: string }) {
+export function Section({ title, subtitle, icon, right, children, className = "", collapsed = false }: { title: string; subtitle?: string; icon?: ReactNode; right?: ReactNode; children: ReactNode; className?: string; collapsed?: boolean }) {
   return (
     <section className={`overflow-hidden rounded-3xl border border-line bg-surface/90 shadow-sm backdrop-blur-sm ${className}`}>
-      <div className="flex items-center justify-between gap-3 border-b border-line bg-gradient-to-r from-brand/15 via-brand/5 to-transparent px-4 py-3 sm:px-5">
+      <div className={`flex items-center justify-between gap-3 ${collapsed ? "" : "border-b border-line"} bg-gradient-to-r from-brand/15 via-brand/5 to-transparent px-4 py-3 sm:px-5`}>
         <div className="flex items-center gap-3">
           {icon && <span className="grid h-9 w-9 place-items-center rounded-xl bg-brand/15 text-brand">{icon}</span>}
           <div>
@@ -32,7 +33,7 @@ export function Section({ title, subtitle, icon, right, children, className = ""
         </div>
         {right}
       </div>
-      <div className="p-4 sm:p-5">{children}</div>
+      {!collapsed && <div className="p-4 sm:p-5">{children}</div>}
     </section>
   );
 }
@@ -50,9 +51,10 @@ export function Empty({ children }: { children: ReactNode }) {
   return <div className="rounded-2xl border border-dashed border-line p-8 text-center text-sm text-subtle">{children}</div>;
 }
 
+/** Rendered in a portal so ancestors with transform/backdrop-filter/overflow can't shrink or clip it. */
 export function Modal({ open, onClose, children, title }: { open: boolean; onClose: () => void; children: ReactNode; title: string }) {
-  if (!open) return null;
-  return (
+  if (!open || typeof document === "undefined") return null;
+  return createPortal(
     <div className="fixed inset-0 z-50 grid place-items-end bg-black/50 p-0 sm:place-items-center sm:p-4" onClick={onClose}>
       <motion.div
         role="dialog"
@@ -64,7 +66,8 @@ export function Modal({ open, onClose, children, title }: { open: boolean; onClo
       >
         {children}
       </motion.div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 

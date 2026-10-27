@@ -1,15 +1,17 @@
 "use client";
 
-import { Calendar, CalendarCheck, ClipboardList, FlaskConical, LineChart, Scale } from "lucide-react";
+import type { ComponentType } from "react";
+import { Apple, Calendar, ClipboardList, LineChart, UtensilsCrossed } from "lucide-react";
 import { useStore, View } from "@/lib/store";
+import { DigitalScale } from "./icons";
 
-const ITEMS: { id: View; label: string; Icon: typeof Scale }[] = [
+const ITEMS: { id: View; label: string; Icon: ComponentType<{ size?: number | string }> }[] = [
   { id: "log", label: "Log", Icon: ClipboardList },
-  { id: "plan", label: "Meal Plan", Icon: CalendarCheck },
+  { id: "plan", label: "Meal Plan", Icon: UtensilsCrossed },
   { id: "calendar", label: "Calendar / History", Icon: Calendar },
   { id: "insights", label: "Insights & Graphs", Icon: LineChart },
-  { id: "nutrients", label: "Nutrient Breakdown", Icon: FlaskConical },
-  { id: "weight", label: "Weight Tracking", Icon: Scale },
+  { id: "nutrients", label: "Nutrient Breakdown", Icon: Apple },
+  { id: "weight", label: "Weight Tracking", Icon: DigitalScale },
 ];
 
 export function Dock() {

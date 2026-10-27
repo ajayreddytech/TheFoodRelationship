@@ -1,10 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ChefHat, Plus, Trash2 } from "lucide-react";
+import { ChefHat, Mic, Plus, RefreshCw, Square, Trash2 } from "lucide-react";
 import { FoodItem } from "@/lib/types";
 import { scaleItem } from "@/lib/dates";
-import type { CookDraft } from "@/lib/parseClient";
+import { correctInput, type CookDraft } from "@/lib/parseClient";
+import { useRecorder } from "@/lib/useRecorder";
 import { Modal } from "./ui";
 
 interface Props {
@@ -18,6 +19,9 @@ export function CookModal({ draft, onClose, onSave }: Props) {
   const [weight, setWeight] = useState("");
   const [servings, setServings] = useState("");
   const [items, setItems] = useState<FoodItem[]>([]);
+  const [transcript, setTranscript] = useState<string | undefined>();
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
 
   useEffect(() => {
     if (!draft) return;
@@ -25,7 +29,23 @@ export function CookModal({ draft, onClose, onSave }: Props) {
     setWeight(draft.cookedWeightG ? String(Math.round(draft.cookedWeightG)) : "");
     setServings(draft.servings ? String(draft.servings) : "");
     setItems(draft.items);
+    setTranscript(draft.transcript);
+    setErr(null);
   }, [draft]);
+
+  // Re-speak corrects the table below; ingredients that aren't mentioned stay as they are.
+  const respeak = useRecorder(async (audio) => {
+    setBusy(true); setErr(null);
+    try {
+      const r = await correctInput(audio, { blocks: [{ bucket: "Lunch", items }], name, cookedWeightG: Number(weight) > 0 ? Number(weight) : null, servings: Number(servings) > 0 ? Number(servings) : null }, "cook");
+      setItems(r.blocks[0]?.items ?? []);
+      if (r.name) setName(r.name);
+      if (r.cookedWeightG) setWeight(String(Math.round(r.cookedWeightG)));
+      if (r.servings) setServings(String(r.servings));
+      if (r.transcript) setTranscript(r.transcript);
+    } catch (e) { setErr(e instanceof Error ? e.message : "Failed"); }
+    setBusy(false);
+  });
 
   const total = items.reduce((s, i) => s + i.calories, 0);
   const patch = (i: number, p: Partial<FoodItem>) => setItems((xs) => xs.map((x, j) => (j === i ? { ...x, ...p } : x)));
@@ -35,8 +55,15 @@ export function CookModal({ draft, onClose, onSave }: Props) {
 
   return (
     <Modal open={!!draft} onClose={onClose} title="Cooked batch">
-      <div className="mb-3 flex items-center gap-2"><ChefHat className="text-brand" /><h2 className="text-xl font-bold">{draft?.batchId ? "Edit cooked batch" : "Cooked batch"}</h2></div>
-      {draft?.transcript && <p className="mb-2 rounded-lg bg-muted px-3 py-1.5 text-xs italic text-subtle">“{draft.transcript}”</p>}
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2"><ChefHat className="text-brand" /><h2 className="text-xl font-bold">{draft?.batchId ? "Edit cooked batch" : "Cooked batch"}</h2></div>
+        <button className="btn-ghost" onClick={respeak.recording ? respeak.stop : respeak.start} disabled={busy || respeak.processing || !respeak.supported}>
+          {busy || respeak.processing ? <RefreshCw size={16} className="animate-spin" /> : respeak.recording ? <Square size={16} className="text-bad" fill="currentColor" /> : <Mic size={16} />}
+          {respeak.recording ? `Stop (${respeak.seconds}s)` : "Re-speak"}
+        </button>
+      </div>
+      {transcript && <p className="mb-2 rounded-lg bg-muted px-3 py-1.5 text-xs italic text-subtle">“{transcript}”</p>}
+      {(err || respeak.error) && <p role="alert" className="mb-2 text-sm text-bad">{err ?? respeak.error}</p>}
       <div className="mb-3 grid gap-2 sm:grid-cols-3">
         <div className="sm:col-span-1"><label className="label" htmlFor="bn">Dish name</label><input id="bn" className="input" value={name} onChange={(e) => setName(e.target.value)} /></div>
         <div><label className="label" htmlFor="bw">Cooked weight (g)</label><input id="bw" type="number" min={0} className="input" value={weight} placeholder="optional" onChange={(e) => setWeight(e.target.value)} /></div>

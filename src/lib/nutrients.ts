@@ -1,5 +1,5 @@
 import { calcAge, calcTDEE, DEFAULT_CALORIE_TARGET } from "./calc";
-import type { Profile } from "./types";
+import type { FoodItem, Profile } from "./types";
 
 export type NutrientGroup = "Macros" | "Fats" | "Vitamins" | "Minerals" | "Other";
 
@@ -54,6 +54,24 @@ export const NUTRIENTS: NutrientDef[] = [
   { key: "selenium_mcg", label: "Selenium", unit: "mcg", group: "Minerals", tip: "Brazil nuts, eggs and seafood" },
   { key: "iodine_mcg", label: "Iodine", unit: "mcg", group: "Minerals", tip: "iodised salt, dairy and seafood" },
 ];
+
+export interface NutrientSource { name: string; value: number; share: number }
+
+/** Top foods contributing to one nutrient; same-named items are merged. `share` is 0-1 of the total from all foods. */
+export function topSources(items: FoodItem[], key: string, n = 5): { sources: NutrientSource[]; total: number } {
+  const by = new Map<string, { name: string; value: number }>();
+  let total = 0;
+  for (const i of items) {
+    const v = ((i.macros as Record<string, number>)[key] ?? (i.micros as Record<string, number>)[key]) || 0;
+    if (v <= 0) continue;
+    total += v;
+    const k = i.name.trim().toLowerCase();
+    const cur = by.get(k);
+    if (cur) cur.value += v; else by.set(k, { name: i.name.trim(), value: v });
+  }
+  const sources = [...by.values()].sort((a, b) => b.value - a.value).slice(0, n).map((s) => ({ ...s, share: total > 0 ? s.value / total : 0 }));
+  return { sources, total };
+}
 
 export const NUTRIENT_KEYS = NUTRIENTS.map((n) => n.key);
 export const MACRO_KEYS = NUTRIENTS.filter((n) => n.macro).map((n) => n.key);

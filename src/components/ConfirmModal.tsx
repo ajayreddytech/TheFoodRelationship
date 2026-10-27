@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { Mic, Plus, RefreshCw, Square, Trash2 } from "lucide-react";
 import { FoodItem, MEAL_BUCKETS, MealBucket, ParsedFood, BUCKET_TIMES } from "@/lib/types";
 import { scaleItem } from "@/lib/dates";
-import { parseInput } from "@/lib/parseClient";
+import { correctInput } from "@/lib/parseClient";
 import { useRecorder } from "@/lib/useRecorder";
 import { Modal } from "./ui";
 
@@ -35,14 +35,14 @@ export function ConfirmModal({ parsed, onClose, onConfirm }: Props) {
     setErr(null);
   }, [parsed]);
 
+  // Re-speak corrects the table below; rows that aren't mentioned stay as they are.
   const respeak = useRecorder(async (audio) => {
     setBusy(true); setErr(null);
     try {
-      const r0 = await parseInput({ audio, mode: "meal" });
-      const r = r0.kind === "meals" ? { kind: "meal" as const, parsed: r0.meals[0] } : r0;
-      if (r.kind !== "meal") throw new Error("Please describe food you ate, not a recipe.");
-      setBucket(r.parsed.target_bucket); setItems(r.parsed.items); setBatch(r.parsed.batch);
-      setOrigTotal(r.parsed.items.reduce((s, i) => s + i.calories, 0)); setTranscript(r.parsed.transcript);
+      const r = await correctInput(audio, { blocks: [{ bucket, items }] }, "meal");
+      const b = r.blocks[0];
+      setBucket(b?.bucket ?? bucket); setItems(b?.items ?? []);
+      if (r.transcript) setTranscript(r.transcript);
     } catch (e) { setErr(e instanceof Error ? e.message : "Failed"); }
     setBusy(false);
   });

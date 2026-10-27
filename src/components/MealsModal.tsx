@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { Mic, Plus, RefreshCw, Square, Trash2 } from "lucide-react";
 import { BUCKET_TIMES, FoodItem, MEAL_BUCKETS, MealBucket, ParsedFood } from "@/lib/types";
 import { scaleItem, todayISO } from "@/lib/dates";
-import { parseInput, ParseMode } from "@/lib/parseClient";
+import { correctInput, ParseMode } from "@/lib/parseClient";
 import { useRecorder } from "@/lib/useRecorder";
 import { Modal } from "./ui";
 
@@ -17,7 +17,7 @@ const toBlocks = (mode: string, bs: ParsedFood[]): MealBlock[] =>
 interface Props {
   open: boolean;
   /** "meal" confirms logged meals; "plan" also shows an editable plan date. */
-  mode: Exclude<ParseMode, "cook">;
+  mode: Exclude<ParseMode, "cook" | "auto">;
   blocks: ParsedFood[];
   transcript?: string;
   date?: string;
@@ -42,15 +42,14 @@ export function MealsModal({ open, mode, blocks: initial, transcript: t0, date: 
     setErr(null);
   }, [open, initial, d0, t0, mode]);
 
+  // Re-speak corrects the tables below; rows that aren't mentioned stay as they are.
   const respeak = useRecorder(async (audio) => {
     setBusy(true); setErr(null);
     try {
-      const r = await parseInput({ audio, mode });
-      if (r.kind === "meals" || r.kind === "plan") {
-        setBlocks(toBlocks(mode, r.meals));
-        setTranscript(r.transcript);
-        if (r.kind === "plan") setDate(r.date);
-      } else throw new Error("Please describe the meals you ate.");
+      const r = await correctInput(audio, { blocks, date }, mode);
+      setBlocks(r.blocks);
+      if (r.transcript) setTranscript(r.transcript);
+      if (mode === "plan" && r.date && r.date >= todayISO()) setDate(r.date);
     } catch (e) { setErr(e instanceof Error ? e.message : "Failed"); }
     setBusy(false);
   });

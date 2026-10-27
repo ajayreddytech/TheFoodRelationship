@@ -1,12 +1,14 @@
 "use client";
 
+import { useState } from "react";
 import { motion } from "framer-motion";
 import { X } from "lucide-react";
 import { useStore } from "@/lib/store";
 import { nutrientStatus } from "@/lib/analytics";
-import { NUTRIENTS, NutrientGroup, rdaFor } from "@/lib/nutrients";
+import { NUTRIENTS, NutrientDef, NutrientGroup, rdaFor } from "@/lib/nutrients";
 import type { FoodItem } from "@/lib/types";
 import { fmt, Modal } from "./ui";
+import { SourcesModal } from "./SourcesModal";
 import { SCALE, TONE } from "./NutrientsView";
 
 export const sumNutrient = (items: FoodItem[], key: string) =>
@@ -23,8 +25,10 @@ export function NutrientModal({ kind, subtitle, items, calories, onClose }: { ki
   const profile = useStore((s) => s.profile);
   const rda = rdaFor(profile);
   const cfg = kind ? KIND[kind] : KIND.macro;
+  const [src, setSrc] = useState<NutrientDef | null>(null);
 
   return (
+    <>
     <Modal open={!!kind} onClose={onClose} title={cfg.title}>
       <div className="mb-3 flex items-start justify-between gap-2">
         <div>
@@ -47,7 +51,9 @@ export function NutrientModal({ kind, subtitle, items, calories, onClose }: { ki
                   const ratio = r ? v / r : 0;
                   const t = TONE[nutrientStatus(n.limit, ratio)];
                   return (
-                    <div key={n.key} className="rounded-xl border border-line bg-muted/30 p-2.5">
+                    <div key={n.key} role="button" tabIndex={0} aria-label={`${n.label}: show top sources`} onClick={() => setSrc(n)}
+                      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setSrc(n); } }}
+                      className="cursor-pointer rounded-xl border border-line bg-muted/30 p-2.5 transition hover:border-brand/50">
                       <div className="flex items-center justify-between gap-2 text-sm">
                         <span className="font-medium">{n.label}</span>
                         <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${t.chip}`}>{Math.round(ratio * 100)}%</span>
@@ -67,5 +73,7 @@ export function NutrientModal({ kind, subtitle, items, calories, onClose }: { ki
       </div>
       <div className="mt-5 flex justify-end"><button className="btn-primary" onClick={onClose}>Close</button></div>
     </Modal>
+    <SourcesModal nutrient={src} items={items} subtitle={subtitle} onClose={() => setSrc(null)} />
+    </>
   );
 }

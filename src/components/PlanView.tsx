@@ -84,7 +84,7 @@ export function PlanView() {
       <MealsModal open={!!editing} mode="plan" blocks={editing ? [editing.block] : []} date={editing?.date} onClose={() => setEditing(null)}
         onConfirm={(bs, date) => { if (editing) replacePlan(editing.date, date, bs.flatMap((b) => b.items)); setEditing(null); }} />
 
-      <CommandBar modes={["plan", "cook"]} onResult={(r) => {
+      <CommandBar modes={["auto", "plan", "cook"]} onResult={(r) => {
         if (r.kind === "plan") setMulti({ blocks: r.meals, transcript: r.transcript, date: r.date });
         else if (r.kind === "cook") setIncoming(r.draft);
       }} />

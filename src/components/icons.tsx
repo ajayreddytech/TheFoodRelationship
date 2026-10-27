@@ -1,6 +1,18 @@
 import { Check, Cookie, Droplet, Dumbbell, Hand, Salad, Sparkles, Utensils, X } from "lucide-react";
 import type { Gyr } from "@/lib/types";
 
+/** Digital bathroom scale (flat platform with a display), for weight tracking. */
+export function DigitalScale({ size = 24, className = "", strokeWidth = 2 }: { size?: number | string; className?: string; strokeWidth?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden>
+      <rect x="3" y="3" width="18" height="18" rx="4" />
+      <rect x="7" y="6.5" width="10" height="5" rx="1.2" />
+      <path d="M9.5 9h5" />
+      <path d="M8.5 16h.01M12 16h.01M15.5 16h.01" />
+    </svg>
+  );
+}
+
 export type MetricKind = "intake" | "expenditure" | "hydration" | "gyr" | "nibbles" | "fast";
 
 /** One icon + colour per metric, used identically across Log, Calendar, Insights and heatmaps. */

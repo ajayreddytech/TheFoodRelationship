@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { CalendarCheck, ChefHat, Loader2, Mic, Send, Square, Utensils } from "lucide-react";
+import { CalendarCheck, ChefHat, Loader2, Mic, Send, Sparkles, Square, Utensils } from "lucide-react";
 import { ParseMode, ParseResult, parseInput } from "@/lib/parseClient";
 import { useRecorder } from "@/lib/useRecorder";
 
@@ -9,6 +9,7 @@ const META: Record<ParseMode, { label: string; Icon: typeof Utensils; placeholde
   meal: { label: "Log", Icon: Utensils, placeholder: "e.g. Breakfast was 2 idlis, lunch was dal rice, or “I ate a third of the biryani for dinner”" },
   plan: { label: "Plan", Icon: CalendarCheck, placeholder: "e.g. Tomorrow: oats with banana, dal rice, 2 rotis with aloo matar" },
   cook: { label: "Cook", Icon: ChefHat, placeholder: "e.g. cooked 300g raw basmati rice, 2 tbsp oil, 400g potatoes…" },
+  auto: { label: "Auto", Icon: Sparkles, placeholder: "Say a meal plan or what you cooked — I'll detect which" },
 };
 
 /** Floating text + voice bar. Only the modes passed in are offered. */

@@ -67,20 +67,20 @@ function MealRow({ m, onEdit, onRemove }: { m: MealEntry; onEdit: () => void; on
   const [open, setOpen] = useState(false);
   const names = m.items.map((i) => i.name).join(", ");
   return (
-    <li className="rounded-lg bg-surface px-2 py-1.5" title={m.items.map((i) => `${i.name} (${i.quantity}) – ${Math.round(i.calories)} kcal`).join("\n")}>
-      <div className="flex items-center gap-2">
+    <li className="min-w-0 overflow-hidden rounded-lg bg-surface px-2 py-1.5" title={m.items.map((i) => `${i.name} (${i.quantity}) – ${Math.round(i.calories)} kcal`).join("\n")}>
+      <div className="flex min-w-0 items-center gap-2">
         <button className="flex min-w-0 flex-1 items-center gap-1.5 text-left" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
           <ChevronDown size={13} className={`shrink-0 text-subtle transition ${open ? "rotate-180" : ""}`} />
-          <span className="truncate text-[11px] text-subtle">{names}</span>
-          <span className="ml-auto shrink-0 font-semibold text-orange-500">{Math.round(m.items.reduce((x, i) => x + i.calories, 0))} kcal</span>
+          <span className="min-w-0 flex-1 truncate text-[11px] text-subtle">{names}</span>
+          <span className="shrink-0 font-semibold text-orange-500">{Math.round(m.items.reduce((x, i) => x + i.calories, 0))} kcal</span>
         </button>
-        <button aria-label="Edit meal" className="text-subtle hover:text-brand" onClick={onEdit}><Pencil size={13} /></button>
-        <button aria-label="Remove meal" className="text-subtle hover:text-bad" onClick={onRemove}><Trash2 size={13} /></button>
+        <button aria-label="Edit meal" className="shrink-0 text-subtle hover:text-brand" onClick={onEdit}><Pencil size={13} /></button>
+        <button aria-label="Remove meal" className="shrink-0 text-subtle hover:text-bad" onClick={onRemove}><Trash2 size={13} /></button>
       </div>
       {open && (
         <ul className="mt-1.5 space-y-0.5 border-t border-line pt-1.5">
           {m.items.map((i, k) => (
-            <li key={k} className="flex justify-between gap-2"><span>{i.name} <span className="text-subtle">({i.quantity})</span></span><span className="tabular-nums text-orange-500">{Math.round(i.calories)}</span></li>
+            <li key={k} className="flex justify-between gap-2"><span className="min-w-0 break-words">{i.name} <span className="text-subtle">({i.quantity})</span></span><span className="shrink-0 tabular-nums text-orange-500">{Math.round(i.calories)}</span></li>
           ))}
         </ul>
       )}
@@ -163,8 +163,8 @@ export function LogView() {
             <div className="rounded-2xl bg-muted/50 p-2 text-center"><div className="text-xs text-subtle">Eating window</div><div className="text-2xl font-bold tabular-nums">{eating != null ? `${eating.toFixed(1)}h` : "—"}</div></div>
             <div className="rounded-2xl bg-muted/50 p-2 text-center"><div className="flex items-center justify-center gap-1 text-xs text-subtle"><Sparkles size={12} className="text-violet-500" />Fasting</div><div className="text-2xl font-bold tabular-nums">{fastH != null ? `${fastH.toFixed(1)}h` : "—"}</div></div>
           </div>
-          <button className={`btn-ghost mt-3 w-full !py-2 ${log.fasted ? "!border-violet-500 !bg-violet-500/15 !text-violet-500" : ""}`} onClick={() => s.setFastingDay(date, !log.fasted)}>
-            <Sparkles size={16} className="text-violet-500" />{log.fasted ? "Fasting day ✓ (tap to undo)" : "Fasting day"}
+          <button className={`btn-ghost mt-3 w-full flex-wrap !py-2 ${log.fasted ? "!border-violet-500 !bg-violet-500/15 !text-violet-500" : ""}`} onClick={() => s.setFastingDay(date, !log.fasted)}>
+            <Sparkles size={16} className="text-violet-500" />{log.fasted ? "Fasting day ✓ (tap to undo)" : <>Fasting day <span className="text-xs font-normal text-subtle">(click this only if you&apos;re fasting the whole day)</span></>}
           </button>
           {log.fasted && <p className="mt-2 text-xs text-subtle">Full fast saved: 0 kcal, 24h, Green, no nibbles. Add expenditure and hydration, then submit again.</p>}
         </Section>
@@ -177,21 +177,21 @@ export function LogView() {
       </div>
       {/* Meals: two columns, filled top to bottom */}
       <Section title="Meals" subtitle="Tap the mic or type below — meals land in the right bucket" icon={<Utensils size={18} />}>
-        <div className="grid items-start gap-3 sm:grid-cols-2">
+        <div className="grid grid-cols-1 items-start gap-3 sm:grid-cols-2">
           {[MEAL_BUCKETS.slice(0, 4), MEAL_BUCKETS.slice(4)].map((col, ci) => (
-            <div key={ci} className="space-y-3">
+            <div key={ci} className="min-w-0 space-y-3">
               {col.map((b) => {
                 const entries = log.meals.filter((m) => m.bucket === b);
                 const cal = entries.reduce((a, m) => a + m.items.reduce((x, i) => x + i.calories, 0), 0);
                 const Icon = BUCKET_ICONS[b];
                 return (
-                  <div key={b} className="rounded-2xl border border-line bg-muted/40 p-3">
+                  <div key={b} className="min-w-0 overflow-hidden rounded-2xl border border-line bg-muted/40 p-3">
                     <div className="flex items-center gap-2">
-                      <span className="grid h-8 w-8 place-items-center rounded-lg bg-brand/15 text-brand"><Icon size={16} /></span>
-                      <div className="min-w-0 flex-1"><div className="truncate text-sm font-semibold">{b}</div><div className="text-[11px] text-subtle">{BUCKET_TIMES[b]}</div></div>
-                      <div className="text-sm font-bold tabular-nums text-orange-500">{Math.round(cal)} <span className="text-[10px] font-medium">kcal</span></div>
+                      <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-brand/15 text-brand"><Icon size={16} /></span>
+                      <div className="min-w-0 flex-1"><div className="truncate text-sm font-semibold">{b}</div><div className="truncate text-[11px] text-subtle">{BUCKET_TIMES[b]}</div></div>
+                      <div className="shrink-0 text-sm font-bold tabular-nums text-orange-500">{Math.round(cal)} <span className="text-[10px] font-medium">kcal</span></div>
                     </div>
-                    <ul className="mt-2 space-y-1.5 text-xs">
+                    <ul className="mt-2 min-w-0 space-y-1.5 text-xs">
                       {entries.length === 0 && <li className="text-subtle">Nothing logged</li>}
                       {entries.map((m) => <MealRow key={m.id} m={m} onEdit={() => setParsed({ target_bucket: m.bucket, items: m.items, editId: m.id })} onRemove={() => s.removeMeal(date, m.id)} />)}
                     </ul>
