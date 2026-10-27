@@ -32,15 +32,18 @@ body {
   color: rgb(var(--fg));
   transition: background-color 0.3s, color 0.3s;
 }
-body::before {
-  content: "";
-  position: fixed;
-  inset: 0;
-  z-index: -1;
-  background:
-    radial-gradient(600px circle at 90% 0%, rgb(var(--brand) / 0.15), transparent 60%),
-    radial-gradient(500px circle at 0% 100%, rgb(var(--accent) / 0.12), transparent 60%);
-}
+
+.bg-orb { border-radius: 9999px; filter: blur(80px); }
+.dark .bg-orb { opacity: 0.55; }
+@keyframes float { 0%, 100% { transform: translate3d(0, 0, 0); } 50% { transform: translate3d(30px, 24px, 0); } }
+@keyframes sway { 0%, 100% { transform: rotate(-3deg); } 50% { transform: rotate(3deg); } }
+@keyframes bob { 0%, 100% { translate: 0 0; } 50% { translate: 0 -10px; } }
+.animate-float-slow { animation: float 18s ease-in-out infinite; }
+.animate-float-slower { animation: float 26s ease-in-out infinite reverse; }
+.animate-sway { animation: sway 9s ease-in-out infinite; }
+.animate-sway-rev { animation: sway 11s ease-in-out infinite reverse; }
+.animate-bob { animation: bob 6s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) { [class*="animate-"] { animation: none !important; } }
 
 select { color: rgb(var(--fg)); }
 select option, select optgroup {
@@ -49,7 +52,7 @@ select option, select optgroup {
 }
 
 @layer components {
-  .card { @apply rounded-2xl border border-line bg-surface p-4 shadow-sm sm:p-5; }
+  .card { @apply rounded-2xl border border-line bg-surface/90 p-4 shadow-sm backdrop-blur-sm sm:p-5; }
   .btn { @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 text-sm font-medium transition active:scale-95 disabled:opacity-50; }
   .btn-primary { @apply btn bg-brand text-white hover:brightness-110; }
   .btn-ghost { @apply btn border border-line bg-surface hover:bg-muted; }

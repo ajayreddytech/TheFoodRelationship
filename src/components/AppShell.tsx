@@ -5,6 +5,8 @@ import { AnimatePresence, motion } from "framer-motion";
 import { useStore } from "@/lib/store";
 import { pullAll, supabase } from "@/lib/supabase";
 import { Dock } from "./Dock";
+import { HeaderNav } from "./HeaderNav";
+import { Backdrop } from "./Backdrop";
 import { LogView } from "./LogView";
 import { CalendarView } from "./CalendarView";
 import { InsightsView } from "./InsightsView";
@@ -39,6 +41,7 @@ export function AppShell() {
         try {
           st.hydrateRemote(await pullAll(user.id));
           await useContent.getState().hydrateContent(user.id);
+          await useStore.getState().syncDrafts();
         } catch (e) {
           useStore.setState({ syncError: e instanceof Error ? e.message : "Sync failed" });
         }
@@ -49,7 +52,16 @@ export function AppShell() {
       // Defer to avoid deadlocking the auth client with its own calls.
       setTimeout(() => apply(session?.user ?? null), 0);
     });
-    return () => sub.subscription.unsubscribe();
+    const refresh = () => { if (document.visibilityState === "visible") void useStore.getState().syncDrafts(); };
+    const timer = setInterval(refresh, 8000);
+    document.addEventListener("visibilitychange", refresh);
+    window.addEventListener("focus", refresh);
+    return () => {
+      sub.subscription.unsubscribe();
+      clearInterval(timer);
+      document.removeEventListener("visibilitychange", refresh);
+      window.removeEventListener("focus", refresh);
+    };
   }, []);
 
   if (!mounted) return <div className="min-h-screen" />;
@@ -58,8 +70,10 @@ export function AppShell() {
 
   return (
     <div className="min-h-screen">
+      <Backdrop />
       <Dock />
-      <main className="mx-auto max-w-5xl px-4 pb-28 pt-6 sm:px-6 md:pb-10 md:pl-24">
+      <HeaderNav />
+      <main className={`mx-auto max-w-5xl px-4 pb-28 sm:px-6 md:pb-10 md:pl-24 ${view === "log" ? "pt-4" : "pt-16"}`}>
         {syncError && (
           <div role="alert" className="mb-4 rounded-xl border border-bad/40 bg-bad/10 px-4 py-2 text-sm">
             Cloud sync issue: {syncError}. Your data is safe locally.

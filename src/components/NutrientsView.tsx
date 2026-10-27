@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { AlertOctagon, AlertTriangle, CheckCircle2, Flame, Lightbulb, Microscope, Info } from "lucide-react";
+import { AlertOctagon, AlertTriangle, CheckCircle2, ChevronDown, Flame, Lightbulb, Microscope, Info } from "lucide-react";
 import { useStore } from "@/lib/store";
 import { windowFor, Gran } from "@/lib/period";
 import { todayISO } from "@/lib/dates";
@@ -21,6 +21,7 @@ export const SCALE = 1.5; // bar spans 0-150% of target; the marker sits at 100%
 export function NutrientsView() {
   const { logs, profile } = useStore();
   const [gran, setGran] = useState<Gran>("day");
+  const [openTone, setOpenTone] = useState<Record<string, boolean>>({});
   const [anchor, setAnchor] = useState(todayISO());
   const w = windowFor(gran, anchor, 1);
   const today = todayISO();
@@ -49,22 +50,29 @@ export function NutrientsView() {
       ) : (
         <>
           <Section title="Dietary insights" subtitle="What stands out in this period" icon={<Lightbulb size={18} />}>
-            <div className="grid gap-4 md:grid-cols-3">
+            <div className="grid items-start gap-3 md:grid-cols-3">
               {(["good", "warn", "bad"] as const).map((tone) => {
                 const t = TONE[tone];
                 const list = insights.filter((i) => i.tone === tone);
                 return (
-                  <div key={tone} className={`rounded-2xl border p-4 ${t.box}`}>
-                    <h3 className={`mb-2 flex items-center gap-2 font-semibold ${t.text}`}><t.Icon size={18} />{t.label} <span className="text-xs font-normal text-subtle">({list.length})</span></h3>
-                    {list.length === 0 ? <p className="text-sm text-subtle">Nothing here.</p> : (
-                      <ul className="space-y-2 text-sm">
-                        {list.map((i) => (
-                          <li key={i.id}>
-                            <b>{i.title}</b> <span className="text-subtle">{i.text}</span>
-                            {i.tip && <span className="block text-xs text-subtle">{i.tip}</span>}
-                          </li>
-                        ))}
-                      </ul>
+                  <div key={tone} className={`self-start rounded-2xl border ${t.box}`}>
+                    <button className={`flex w-full items-center gap-2 p-3 text-left font-semibold ${t.text}`} aria-expanded={!!openTone[tone]} onClick={() => setOpenTone((o) => ({ ...o, [tone]: !o[tone] }))}>
+                      <t.Icon size={18} />{t.label} <span className="text-xs font-normal text-subtle">({list.length})</span>
+                      <ChevronDown size={16} className={`ml-auto transition ${openTone[tone] ? "rotate-180" : ""}`} />
+                    </button>
+                    {openTone[tone] && (
+                      <div className="px-4 pb-4">
+                        {list.length === 0 ? <p className="text-sm text-subtle">Nothing here.</p> : (
+                          <ul className="space-y-2 text-sm">
+                            {list.map((i) => (
+                              <li key={i.id}>
+                                <b>{i.title}</b> <span className="text-subtle">{i.text}</span>
+                                {i.tip && <span className="block text-xs text-subtle">{i.tip}</span>}
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </div>
                     )}
                   </div>
                 );

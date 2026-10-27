@@ -21,7 +21,7 @@ export function PageHeader({ title, subtitle, right }: { title: string; subtitle
 /** A clearly bounded block with a tinted header strip. */
 export function Section({ title, subtitle, icon, right, children, className = "" }: { title: string; subtitle?: string; icon?: ReactNode; right?: ReactNode; children: ReactNode; className?: string }) {
   return (
-    <section className={`overflow-hidden rounded-3xl border border-line bg-surface shadow-sm ${className}`}>
+    <section className={`overflow-hidden rounded-3xl border border-line bg-surface/90 shadow-sm backdrop-blur-sm ${className}`}>
       <div className="flex items-center justify-between gap-3 border-b border-line bg-gradient-to-r from-brand/15 via-brand/5 to-transparent px-4 py-3 sm:px-5">
         <div className="flex items-center gap-3">
           {icon && <span className="grid h-9 w-9 place-items-center rounded-xl bg-brand/15 text-brand">{icon}</span>}

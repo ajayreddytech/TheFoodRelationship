@@ -92,6 +92,8 @@ export interface DailyLog {
   /** Full-day fast: 24h fasting, no intake. */
   fasted: boolean;
   submitted: boolean;
+  /** Last local edit (ISO); used to sync unsubmitted drafts across devices. */
+  updatedAt?: string;
 }
 
 export interface Profile {

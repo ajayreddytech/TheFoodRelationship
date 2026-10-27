@@ -110,7 +110,7 @@ export async function POST(req: Request) {
           method: "POST",
           headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
           body: payload,
-          signal: AbortSignal.timeout(30000),
+          signal: AbortSignal.timeout(15000),
         });
       } catch {
         res = null;
@@ -118,7 +118,7 @@ export async function POST(req: Request) {
       }
       if (res.ok) break outer;
       if (res.status === 503 || res.status === 429) {
-        await new Promise((r) => setTimeout(r, 600 * (attempt + 1)));
+        await new Promise((r) => setTimeout(r, 300 * (attempt + 1)));
         continue;
       }
       continue outer; // 404 / 400 etc: try next model

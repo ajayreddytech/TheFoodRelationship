@@ -88,3 +88,16 @@ alter table public.user_content enable row level security;
 drop policy if exists "own content" on public.user_content;
 create policy "own content" on public.user_content for all
   using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
+-- Live drafts of each day's form (submitted or not) so every device stays in sync.
+create table if not exists public.daily_drafts (
+  user_id uuid references auth.users(id) on delete cascade,
+  log_date date,
+  data jsonb not null,
+  updated_at timestamptz default now(),
+  primary key (user_id, log_date)
+);
+alter table public.daily_drafts enable row level security;
+drop policy if exists "own drafts" on public.daily_drafts;
+create policy "own drafts" on public.daily_drafts for all
+  using (auth.uid() = user_id) with check (auth.uid() = user_id);

@@ -1,13 +1,14 @@
 "use client";
 
-import { useState } from "react";
-import { LogIn, LogOut, Moon, Sun } from "lucide-react";
+import { useMemo, useState } from "react";
+import { Activity, LogIn, LogOut, Moon, Sun } from "lucide-react";
 import { useStore } from "@/lib/store";
 import { ACTIVITY_FACTORS, BMI_CLASSES, bmiClass, bmiCategory, calcAge, calcBMI, calcBMR, calcTDEE, cmToIn, inToCm, kgToLb, lbToKg, round } from "@/lib/calc";
 import { signInWithGoogle, signOut, supabaseConfigured } from "@/lib/supabase";
 import { todayISO } from "@/lib/dates";
 import { ActivityLevel, Gender, Palette } from "@/lib/types";
 import { PageHeader, fmt } from "./ui";
+import { ChartCard } from "./charts";
 
 function NumField({ id, label, value, onCommit, step = "any" }: { id: string; label: string; value: number; onCommit: (n: number) => void; step?: string }) {
   const [txt, setTxt] = useState<string | null>(null);
@@ -37,6 +38,7 @@ export function SettingsView() {
   const bmi = calcBMI(p.weightKg, p.heightCm);
   const bmr = calcBMR(p);
   const tdee = calcTDEE(p);
+  const bmiSeries = useMemo(() => [...s.weights].sort((a, b) => a.date.localeCompare(b.date)).map((w) => ({ key: w.date, label: w.date.slice(5), value: calcBMI(w.weightKg, p.heightCm) })), [s.weights, p.heightCm]);
 
   return (
     <div className="space-y-4">
@@ -87,6 +89,8 @@ export function SettingsView() {
         </div>
         <p className="text-xs text-subtle">Your daily calorie goal equals your maintenance calories (TDEE){tdee != null ? `: ${fmt(tdee)} kcal` : ""}.</p>
       </section>
+
+      <ChartCard title="BMI progress" subtitle="Calculated from every weight you have logged and your current height" icon={<Activity size={18} />} color="rgb(16 185 129)" data={bmiSeries} unit="BMI" decimals={1} goal={24.9} goalLabel="Healthy max 24.9" />
 
       <section className="card grid gap-3 sm:grid-cols-3">
         <h2 className="font-semibold sm:col-span-3">Daily goals</h2>

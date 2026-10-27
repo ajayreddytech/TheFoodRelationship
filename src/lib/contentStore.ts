@@ -37,6 +37,9 @@ interface ContentState extends ContentData {
   addItem: (list: List, id: string, text: string) => void;
   editItem: (list: List, id: string, index: number, text: string) => void;
   removeItem: (list: List, id: string, index: number) => void;
+  addModule: (list: List, title: string, emoji: string) => string;
+  renameModule: (list: List, id: string, title: string, emoji: string) => void;
+  removeModule: (list: List, id: string) => void;
   addFaq: (q: string, a: string) => void;
   editFaq: (index: number, q: string, a: string) => void;
   removeFaq: (index: number) => void;
@@ -82,6 +85,21 @@ export const useContent = create<ContentState>()(
         addItem: (list, id, text) => upd((st) => mapList(st, list, id, (a) => [...a, text.trim()])),
         editItem: (list, id, index, text) => upd((st) => mapList(st, list, id, (a) => a.map((x, i) => (i === index ? text.trim() : x)))),
         removeItem: (list, id, index) => upd((st) => mapList(st, list, id, (a) => a.filter((_, i) => i !== index))),
+        addModule: (list, title, emoji) => {
+          const id = `m${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+          const t = title.trim() || "Untitled";
+          const e = emoji.trim() || "📌";
+          upd((st) => list === "recipes"
+            ? { recipes: [...st.recipes, { id, title: t, emoji: e, items: [] }] }
+            : { guide: [...st.guide, { id, title: t, subtitle: "", emoji: e, points: [] }] });
+          return id;
+        },
+        renameModule: (list, id, title, emoji) => upd((st) => list === "recipes"
+          ? { recipes: st.recipes.map((m) => (m.id === id ? { ...m, title: title.trim() || m.title, emoji: emoji.trim() || m.emoji } : m)) }
+          : { guide: st.guide.map((m) => (m.id === id ? { ...m, title: title.trim() || m.title, emoji: emoji.trim() || m.emoji } : m)) }),
+        removeModule: (list, id) => upd((st) => list === "recipes"
+          ? { recipes: st.recipes.filter((m) => m.id !== id) }
+          : { guide: st.guide.filter((m) => m.id !== id) }),
         addFaq: (q, a) => upd((st) => ({ faqs: [...st.faqs, { q: q.trim(), a: a.trim() }] })),
         editFaq: (index, q, a) => upd((st) => ({ faqs: st.faqs.map((f, i) => (i === index ? { q: q.trim(), a: a.trim() } : f)) })),
         removeFaq: (index) => upd((st) => ({ faqs: st.faqs.filter((_, i) => i !== index) })),

@@ -3,7 +3,7 @@ import { persist } from "zustand/middleware";
 import type { CookedBatch, DailyLog, MealBucket, MealEntry, FoodItem, Palette, Profile, Theme, WeightLog } from "./types";
 import { emptyLog, scaleItem, sumItems, todayISO, uid } from "./dates";
 import {
-  RemoteData, deleteRemoteBatch, deleteRemoteLog, deleteRemoteWeight, pushBatch, pushLog, pushProfile, pushWeight,
+  RemoteData, deleteRemoteBatch, deleteRemoteDraft, deleteRemoteLog, deleteRemoteWeight, pullDrafts, pushBatch, pushDraft, pushLog, pushProfile, pushWeight,
 } from "./supabase";
 
 export type View = "log" | "plan" | "calendar" | "insights" | "nutrients" | "recipes" | "guide" | "weight" | "settings";
@@ -57,6 +57,8 @@ interface State {
   removeWeight: (date: string) => void;
   setUser: (id: string | null, email: string | null) => void;
   hydrateRemote: (r: RemoteData) => void;
+  /** Merges drafts from other devices (newer wins) and uploads newer local drafts. */
+  syncDrafts: () => Promise<void>;
 }
 
 const sync = (set: (p: Partial<State>) => void, fn: () => Promise<unknown>) =>
@@ -64,6 +66,19 @@ const sync = (set: (p: Partial<State>) => void, fn: () => Promise<unknown>) =>
     () => set({ syncError: null }),
     (e: unknown) => set({ syncError: e instanceof Error ? e.message : "Sync failed" }),
   );
+
+const now = () => new Date().toISOString();
+const draftTimers: Record<string, ReturnType<typeof setTimeout>> = {};
+
+/** Debounced upload of one day's form so other devices see it even before submission. */
+function queueDraft(set: (p: Partial<State>) => void, get: () => State, date: string) {
+  clearTimeout(draftTimers[date]);
+  draftTimers[date] = setTimeout(() => {
+    const u = get().userId;
+    const log = get().logs[date];
+    if (u && log) sync(set, () => pushDraft(u, log));
+  }, 600);
+}
 
 const latestWeight = (w: WeightLog[]) => [...w].sort((a, b) => b.date.localeCompare(a.date))[0];
 
@@ -96,22 +111,28 @@ export const useStore = create<State>()(
 
       getLog: (date) => get().logs[date] ?? emptyLog(date),
 
-      patchLog: (date, patch) =>
-        set((s) => ({ logs: { ...s.logs, [date]: { ...(s.logs[date] ?? emptyLog(date)), ...patch, submitted: false } } })),
+      patchLog: (date, patch) => {
+        set((s) => ({ logs: { ...s.logs, [date]: { ...(s.logs[date] ?? emptyLog(date)), ...patch, submitted: false, updatedAt: now() } } }));
+        queueDraft(set, get, date);
+      },
 
-      addMeal: (date, bucket, items) =>
+      addMeal: (date, bucket, items) => {
         set((s) => {
           const cur = s.logs[date] ?? emptyLog(date);
           const entry: MealEntry = { id: uid(), bucket, items };
-          return { logs: { ...s.logs, [date]: { ...cur, meals: [...cur.meals, entry], submitted: false } } };
-        }),
+          return { logs: { ...s.logs, [date]: { ...cur, meals: [...cur.meals, entry], submitted: false, updatedAt: now() } } };
+        });
+        queueDraft(set, get, date);
+      },
 
-      updateMeal: (date, id, bucket, items) =>
+      updateMeal: (date, id, bucket, items) => {
         set((s) => {
           const cur = s.logs[date];
           if (!cur) return s;
-          return { logs: { ...s.logs, [date]: { ...cur, meals: cur.meals.map((m) => (m.id === id ? { ...m, bucket, items } : m)), submitted: false } } };
-        }),
+          return { logs: { ...s.logs, [date]: { ...cur, meals: cur.meals.map((m) => (m.id === id ? { ...m, bucket, items } : m)), submitted: false, updatedAt: now() } } };
+        });
+        queueDraft(set, get, date);
+      },
 
       updateBatch: (id, patch) => {
         const old = get().batches.find((b) => b.id === id);
@@ -141,28 +162,31 @@ export const useStore = create<State>()(
         if (u) sync(set, async () => { await pushBatch(u, batch); for (const l of changed) if (l.submitted) await pushLog(u, l); });
       },
 
-      removeMeal: (date, id) =>
+      removeMeal: (date, id) => {
         set((s) => {
           const cur = s.logs[date];
           if (!cur) return s;
-          return { logs: { ...s.logs, [date]: { ...cur, meals: cur.meals.filter((m) => m.id !== id), submitted: false } } };
-        }),
+          return { logs: { ...s.logs, [date]: { ...cur, meals: cur.meals.filter((m) => m.id !== id), submitted: false, updatedAt: now() } } };
+        });
+        queueDraft(set, get, date);
+      },
 
       submitLog: (date) => {
-        const log = { ...get().getLog(date), submitted: true };
+        const log = { ...get().getLog(date), submitted: true, updatedAt: now() };
         set((s) => ({ logs: { ...s.logs, [date]: log } }));
         const u = get().userId;
-        if (u) sync(set, () => pushLog(u, log));
+        if (u) sync(set, async () => { await pushLog(u, log); await pushDraft(u, log); });
       },
 
       setFastingDay: (date, on) => {
         const cur = get().getLog(date);
         const log: DailyLog = on
-          ? { ...cur, meals: [], fasted: true, firstMealAt: null, lastMealAt: null, gyr: "green", nibbles: false, submitted: true }
-          : { ...cur, fasted: false, submitted: false };
+          ? { ...cur, meals: [], fasted: true, firstMealAt: null, lastMealAt: null, gyr: "green", nibbles: false, submitted: true, updatedAt: now() }
+          : { ...cur, fasted: false, submitted: false, updatedAt: now() };
         set((s) => ({ logs: { ...s.logs, [date]: log } }));
         const u = get().userId;
-        if (on && u) sync(set, () => pushLog(u, log));
+        if (on && u) sync(set, async () => { await pushLog(u, log); await pushDraft(u, log); });
+        else queueDraft(set, get, date);
       },
 
       addBatch: (b) => {
@@ -192,7 +216,7 @@ export const useStore = create<State>()(
           return { logs };
         });
         const u = get().userId;
-        if (u) sync(set, () => deleteRemoteLog(u, date));
+        if (u) sync(set, async () => { await deleteRemoteLog(u, date); await deleteRemoteDraft(u, date); });
       },
 
       addWeight: (date, kg) => {
@@ -214,12 +238,35 @@ export const useStore = create<State>()(
 
       setUser: (userId, userEmail) => set({ userId, userEmail }),
 
+      syncDrafts: async () => {
+        const u = get().userId;
+        if (!u) return;
+        try {
+          const remote = await pullDrafts(u);
+          const byDate = new Map(remote.map((d) => [d.date, d]));
+          const logs = { ...get().logs };
+          let changed = false;
+          for (const d of remote) {
+            const local = logs[d.date];
+            if (!local || (d.updatedAt ?? "") > (local.updatedAt ?? "")) { logs[d.date] = { ...emptyLog(d.date), ...d }; changed = true; }
+          }
+          if (changed) set({ logs });
+          for (const l of Object.values(get().logs)) {
+            const r = byDate.get(l.date);
+            if (l.updatedAt && (!r || l.updatedAt > (r.updatedAt ?? ""))) await pushDraft(u, l);
+          }
+        } catch (e) {
+          set({ syncError: e instanceof Error ? e.message : "Sync failed" });
+        }
+      },
+
       // Remote wins per-date; local-only records are pushed up so guest data isn't lost.
       hydrateRemote: (r) => {
         const s = get();
         const remoteDates = new Set(r.logs.map((l) => l.date));
         const logs = { ...s.logs };
-        for (const l of r.logs) logs[l.date] = l;
+        // An unsubmitted local draft is never overwritten by the last submitted copy; syncDrafts resolves it.
+        for (const l of r.logs) if (!(logs[l.date] && !logs[l.date].submitted)) logs[l.date] = l;
         const rw = new Set(r.weights.map((w) => w.date));
         const weights = [...r.weights, ...s.weights.filter((w) => !rw.has(w.date))];
         const rb = new Set(r.batches.map((b) => b.id));

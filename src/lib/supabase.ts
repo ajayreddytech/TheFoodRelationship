@@ -95,6 +95,25 @@ export async function deleteRemoteBatch(uid: string, id: string) {
   if (error) throw error;
 }
 
+export async function pushDraft(uid: string, log: DailyLog) {
+  if (!supabase) return;
+  const { error } = await supabase.from("daily_drafts").upsert({ user_id: uid, log_date: log.date, data: log, updated_at: log.updatedAt ?? new Date().toISOString() });
+  if (error) throw error;
+}
+
+export async function deleteRemoteDraft(uid: string, date: string) {
+  if (!supabase) return;
+  const { error } = await supabase.from("daily_drafts").delete().eq("user_id", uid).eq("log_date", date);
+  if (error) throw error;
+}
+
+export async function pullDrafts(uid: string): Promise<DailyLog[]> {
+  if (!supabase) return [];
+  const { data, error } = await supabase.from("daily_drafts").select("data").eq("user_id", uid);
+  if (error) throw error;
+  return ((data ?? []) as { data: DailyLog }[]).map((r) => r.data);
+}
+
 export interface ContentRow { plans: unknown; recipes: unknown; guide: unknown; faqs: unknown }
 
 export async function pushContent(uid: string, c: ContentRow) {

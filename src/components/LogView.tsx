@@ -16,6 +16,7 @@ import { GYR_STYLE, METRICS, MetricKind, MetricTile } from "./icons";
 import { ConfirmModal } from "./ConfirmModal";
 import { MealsModal } from "./MealsModal";
 import { CommandBar } from "./CommandBar";
+import { NutrientModal } from "./NutrientModal";
 import { useContent } from "@/lib/contentStore";
 
 
@@ -94,6 +95,7 @@ export function LogView() {
   const [parsed, setParsed] = useState<ParsedFood | null>(null);
   const [multi, setMulti] = useState<{ blocks: ParsedFood[]; transcript?: string } | null>(null);
   const [saved, setSaved] = useState(false);
+  const [planProfile, setPlanProfile] = useState(false);
 
   const planItems = useContent((st) => st.plans[todayISO()]) ?? [];
   const planCal = planItems.reduce((a, i) => a + i.calories, 0);
@@ -144,20 +146,12 @@ export function LogView() {
   return (
     <div className="space-y-5 pb-40 md:pb-28">
       {/* Banner */}
-      <div className="relative overflow-hidden rounded-3xl border border-line bg-gradient-to-br from-brand/20 via-surface to-surface p-4 sm:p-6">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div className="flex items-center gap-4">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/logo.png" alt="TheFoodRelationship logo" className="h-16 w-16 rounded-full border-2 border-brand/50 object-cover shadow-lg sm:h-20 sm:w-20" />
-            <div>
-              <h1 className="text-2xl font-extrabold tracking-tight sm:text-4xl">TheFoodRelationship</h1>
-              <p className="mt-1 max-w-xl text-sm italic text-subtle">“{quote}”</p>
-            </div>
-          </div>
-          <div className="flex items-center gap-2 rounded-xl border border-line bg-surface px-3 py-2">
-            <label htmlFor="log-date" className="sr-only">Log date</label>
-            <input id="log-date" type="date" className="bg-transparent font-medium outline-none" value={date} max={todayISO()} onChange={(e) => e.target.value && s.setDate(e.target.value)} />
-          </div>
+      <div className="relative overflow-hidden rounded-3xl border border-line bg-gradient-to-br from-brand/20 via-surface to-surface p-4 pt-16 sm:p-6 sm:pt-16">
+        <div className="flex min-w-0 flex-col items-center gap-2 text-center">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/logo.png" alt="TheFoodRelationship logo" className="h-16 w-16 object-contain drop-shadow-lg sm:h-20 sm:w-20" />
+          <h1 className="max-w-full break-words text-[clamp(1.35rem,6.5vw,2.25rem)] font-extrabold leading-tight tracking-tight">TheFoodRelationship</h1>
+          <p className="max-w-xl text-sm italic text-subtle">“{quote}”</p>
         </div>
       </div>
 
@@ -177,7 +171,9 @@ export function LogView() {
 
         <Section title="Today's meal plan" subtitle={planItems.length ? `${fmt(planCal)} kcal planned` : "Nothing planned"} icon={<CalendarCheck size={18} />}>
           {planItems.length > 0 && (<ul className="max-h-56 space-y-1 overflow-y-auto text-sm">{planItems.map((i, k) => (<li key={k} className="flex justify-between gap-2"><span className="truncate">{i.name} <span className="text-subtle">({i.quantity})</span></span><span className="tabular-nums text-orange-500">{fmt(i.calories)}</span></li>))}</ul>)}
+          {planItems.length > 0 && <button className="btn-ghost mt-3 w-full !py-2" onClick={() => setPlanProfile(true)}>Nutrition info</button>}
         </Section>
+        <NutrientModal kind={planProfile ? "all" : null} subtitle="Today's meal plan · whole day" items={planItems} calories={planCal} onClose={() => setPlanProfile(false)} />
       </div>
       {/* Meals: two columns, filled top to bottom */}
       <Section title="Meals" subtitle="Tap the mic or type below — meals land in the right bucket" icon={<Utensils size={18} />}>
@@ -220,6 +216,15 @@ export function LogView() {
               <span className="min-w-[4rem] text-center text-xl font-bold tabular-nums">{log.hydrationL.toFixed(1)} L</span>
               <button aria-label="More water" className="btn-ghost !px-3" onClick={() => s.patchLog(date, { hydrationL: +(log.hydrationL + 0.5).toFixed(1) })}><Plus size={16} /></button>
             </InputRow>
+            <InputRow kind="fast" label="Fast"><span className="text-2xl font-bold tabular-nums">{fastH != null ? fastH.toFixed(1) : "—"}</span><span className="text-sm text-subtle">hours</span></InputRow>
+            <InputRow kind="nibbles" label="No nibbles">
+              {([false, true] as const).map((nibbled) => (
+                <button key={String(nibbled)} aria-pressed={log.nibbles === nibbled} onClick={() => s.patchLog(date, { nibbles: log.nibbles === nibbled ? null : nibbled })}
+                  className={`flex items-center gap-1 rounded-xl border-2 px-5 py-2 text-sm font-semibold ${log.nibbles === nibbled ? (nibbled ? "border-transparent bg-bad text-white" : "border-transparent bg-good text-white") : "border-line"}`}>
+                  {nibbled ? <X size={14} /> : <Check size={14} />}{nibbled ? "No" : "Yes"}
+                </button>
+              ))}
+            </InputRow>
             <InputRow kind="gyr" label="GYR" tone={log.gyr ? GYR_STYLE[log.gyr].text : undefined}>
               <div className="grid w-full grid-cols-3 gap-2 sm:w-96">
                 {(["green", "yellow", "red"] as Gyr[]).map((g) => (
@@ -231,15 +236,6 @@ export function LogView() {
                 ))}
               </div>
             </InputRow>
-            <InputRow kind="nibbles" label="No nibbles">
-              {([false, true] as const).map((nibbled) => (
-                <button key={String(nibbled)} aria-pressed={log.nibbles === nibbled} onClick={() => s.patchLog(date, { nibbles: log.nibbles === nibbled ? null : nibbled })}
-                  className={`flex items-center gap-1 rounded-xl border-2 px-5 py-2 text-sm font-semibold ${log.nibbles === nibbled ? (nibbled ? "border-transparent bg-bad text-white" : "border-transparent bg-good text-white") : "border-line"}`}>
-                  {nibbled ? <X size={14} /> : <Check size={14} />}{nibbled ? "No" : "Yes"}
-                </button>
-              ))}
-            </InputRow>
-            <InputRow kind="fast" label="Fast"><span className="text-2xl font-bold tabular-nums">{fastH != null ? fastH.toFixed(1) : "—"}</span><span className="text-sm text-subtle">hours</span></InputRow>
           </div>
         </Section>
 

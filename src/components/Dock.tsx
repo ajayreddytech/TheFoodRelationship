@@ -1,18 +1,15 @@
 "use client";
 
-import { BookOpen, Calendar, CalendarCheck, CookingPot, ClipboardList, FlaskConical, LineChart, Scale, Settings } from "lucide-react";
+import { Calendar, CalendarCheck, ClipboardList, FlaskConical, LineChart, Scale } from "lucide-react";
 import { useStore, View } from "@/lib/store";
 
-const ITEMS: { id: View; label: string; Icon: typeof Settings }[] = [
+const ITEMS: { id: View; label: string; Icon: typeof Scale }[] = [
   { id: "log", label: "Log", Icon: ClipboardList },
   { id: "plan", label: "Meal Plan", Icon: CalendarCheck },
   { id: "calendar", label: "Calendar / History", Icon: Calendar },
   { id: "insights", label: "Insights & Graphs", Icon: LineChart },
   { id: "nutrients", label: "Nutrient Breakdown", Icon: FlaskConical },
   { id: "weight", label: "Weight Tracking", Icon: Scale },
-  { id: "recipes", label: "Recipes & Meal Prep", Icon: CookingPot },
-  { id: "guide", label: "Guide", Icon: BookOpen },
-  { id: "settings", label: "Settings", Icon: Settings },
 ];
 
 export function Dock() {
@@ -27,7 +24,7 @@ export function Dock() {
       {ITEMS.map(({ id, label, Icon }) => {
         const active = view === id;
         return (
-          <div key={id} className={`group relative ${id === "settings" ? "md:mt-3 md:border-t md:border-line md:pt-3" : ""}`}>
+          <div key={id} className="group relative">
             <button
               onClick={() => setView(id)}
               aria-label={label}
