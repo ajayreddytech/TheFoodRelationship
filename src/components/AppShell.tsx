@@ -52,7 +52,13 @@ export function AppShell() {
       // Defer to avoid deadlocking the auth client with its own calls.
       setTimeout(() => apply(session?.user ?? null), 0);
     });
-    const refresh = () => { if (document.visibilityState === "visible") void useStore.getState().syncDrafts(); };
+    const refresh = () => {
+      if (document.visibilityState !== "visible") return;
+      void useStore.getState().syncDrafts();
+      void useStore.getState().syncShared();
+      const uid = useStore.getState().userId;
+      if (uid) useContent.getState().hydrateContent(uid).catch(() => {});
+    };
     const timer = setInterval(refresh, 8000);
     document.addEventListener("visibilitychange", refresh);
     window.addEventListener("focus", refresh);

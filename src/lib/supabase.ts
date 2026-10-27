@@ -33,12 +33,12 @@ export async function signOut() {
   await supabase?.auth.signOut();
 }
 
-export async function pushProfile(uid: string, p: Profile) {
+export async function pushProfile(uid: string, p: Profile, prefs: { theme: string; palette: string }) {
   if (!supabase) return;
   const row: UsersProfileRow = {
     user_id: uid, dob: p.dob, gender: p.gender, height_cm: p.heightCm, weight_kg: p.weightKg,
     activity_level: p.activity, unit_system: p.unitSystem, expenditure_goal: p.expenditureGoal,
-    hydration_goal_l: p.hydrationGoalL, fasting_goal_h: p.fastingGoalH, target_weight_kg: p.targetWeightKg,
+    hydration_goal_l: p.hydrationGoalL, fasting_goal_h: p.fastingGoalH, target_weight_kg: p.targetWeightKg, prefs,
   };
   const { error } = await supabase.from("users_profile").upsert(row);
   if (error) throw error;
@@ -102,6 +102,27 @@ export async function deleteRemoteBatch(uid: string, id: string) {
   if (!supabase) return;
   const { error } = await supabase.from("cooked_batches").delete().eq("user_id", uid).eq("id", id);
   if (error) throw error;
+}
+
+export async function pullBatches(uid: string): Promise<CookedBatch[]> {
+  if (!supabase) return [];
+  const { data, error } = await supabase.from("cooked_batches").select("data").eq("user_id", uid);
+  if (error) throw error;
+  return ((data ?? []) as { data: CookedBatch }[]).map((r) => r.data);
+}
+
+export async function pullProfile(uid: string): Promise<UsersProfileRow | null> {
+  if (!supabase) return null;
+  const { data, error } = await supabase.from("users_profile").select("*").eq("user_id", uid).maybeSingle();
+  if (error) throw error;
+  return (data as UsersProfileRow | null) ?? null;
+}
+
+export async function pullWeights(uid: string): Promise<WeightLog[]> {
+  if (!supabase) return [];
+  const { data, error } = await supabase.from("weight_logs").select("log_date,weight_kg").eq("user_id", uid);
+  if (error) throw error;
+  return ((data ?? []) as { log_date: string; weight_kg: number }[]).map((r) => ({ date: r.log_date, weightKg: Number(r.weight_kg) }));
 }
 
 export async function pushDraft(uid: string, log: DailyLog) {

@@ -1,9 +1,9 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import type { CookedBatch, DailyLog, MealBucket, MealEntry, FoodItem, Palette, Profile, Theme, WeightLog } from "./types";
+import type { CookedBatch, DailyLog, MealBucket, MealEntry, FoodItem, Palette, Profile, Theme, UsersProfileRow, WeightLog } from "./types";
 import { emptyLog, scaleItem, sumItems, todayISO, uid } from "./dates";
 import {
-  RemoteData, deleteRemoteBatch, deleteRemoteDraft, deleteRemoteLog, deleteRemoteWeight, pullDrafts, pushBatch, pushDraft, pushLog, pushProfile, pushWeight, syncMessage,
+  RemoteData, deleteRemoteBatch, deleteRemoteDraft, deleteRemoteLog, deleteRemoteWeight, pullBatches, pullDrafts, pullProfile, pullWeights, pushBatch, pushDraft, pushLog, pushProfile, pushWeight, syncMessage,
 } from "./supabase";
 
 export type View = "log" | "plan" | "calendar" | "insights" | "nutrients" | "recipes" | "guide" | "weight" | "settings";
@@ -30,6 +30,12 @@ interface State {
   logs: Record<string, DailyLog>;
   weights: WeightLog[];
   batches: CookedBatch[];
+  /** Ids/dates known to exist on the server. A synced item that vanishes remotely was deleted on another device. */
+  syncedBatchIds: string[];
+  syncedDrafts: string[];
+  syncedWeights: string[];
+  /** Batch deletions not yet confirmed by the server (retried so they cannot come back). */
+  deletedBatchIds: string[];
   userId: string | null;
   userEmail: string | null;
   syncError: string | null;
@@ -59,6 +65,40 @@ interface State {
   hydrateRemote: (r: RemoteData) => void;
   /** Merges drafts from other devices (newer wins) and uploads newer local drafts. */
   syncDrafts: () => Promise<void>;
+  /** Pulls cooked batches and weights so deletes/edits made on other devices show up here. */
+  syncShared: () => Promise<void>;
+}
+
+const addTo = (xs: string[], ...ids: string[]) => [...new Set([...xs, ...ids])];
+
+/** Batches whose upload is in flight; a pull must not overwrite them with older server data. */
+const batchInflight = new Set<string>();
+
+function mergeBatches(local: CookedBatch[], remote: CookedBatch[], synced: string[], deleted: string[]) {
+  const del = new Set(deleted), syn = new Set(synced), rids = new Set(remote.map((b) => b.id));
+  const out = remote.filter((b) => !del.has(b.id)).map((b) => (batchInflight.has(b.id) ? local.find((x) => x.id === b.id) ?? b : b));
+  const toPush: CookedBatch[] = [];
+  for (const l of local) {
+    if (rids.has(l.id) || del.has(l.id)) continue;
+    if (syn.has(l.id) && !batchInflight.has(l.id)) continue; // deleted on another device
+    out.push(l);
+    toPush.push(l);
+  }
+  out.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  return { batches: out, toPush, synced: [...rids] };
+}
+
+async function pushBatchTracked(set: (p: Partial<State>) => void, get: () => State, u: string, b: CookedBatch) {
+  batchInflight.add(b.id);
+  try {
+    await pushBatch(u, b);
+    set({ syncedBatchIds: addTo(get().syncedBatchIds, b.id) });
+  } finally { batchInflight.delete(b.id); }
+}
+
+async function pushDraftTracked(set: (p: Partial<State>) => void, get: () => State, u: string, log: DailyLog) {
+  await pushDraft(u, log);
+  set({ syncedDrafts: addTo(get().syncedDrafts, log.date) });
 }
 
 const sync = (set: (p: Partial<State>) => void, fn: () => Promise<unknown>) =>
@@ -76,11 +116,28 @@ function queueDraft(set: (p: Partial<State>) => void, get: () => State, date: st
   draftTimers[date] = setTimeout(() => {
     const u = get().userId;
     const log = get().logs[date];
-    if (u && log) sync(set, () => pushDraft(u, log));
+    if (u && log) sync(set, () => pushDraftTracked(set, get, u, log));
   }, 600);
 }
 
 const latestWeight = (w: WeightLog[]) => [...w].sort((a, b) => b.date.localeCompare(a.date))[0];
+
+const prefsOf = (s: { theme: Theme; palette: Palette }) => ({ theme: s.theme, palette: s.palette });
+
+/** Overlay a remote profile row (settings, goals, theme) on the local state. */
+function applyProfileRow(s: { profile: Profile; theme: Theme; palette: Palette }, p: UsersProfileRow | null) {
+  if (!p) return { profile: s.profile, theme: s.theme, palette: s.palette };
+  const o = s.profile;
+  const profile: Profile = {
+    dob: p.dob, gender: p.gender ?? o.gender, heightCm: p.height_cm ?? o.heightCm,
+    weightKg: p.weight_kg ?? o.weightKg, activity: p.activity_level ?? o.activity,
+    unitSystem: p.unit_system ?? o.unitSystem,
+    expenditureGoal: p.expenditure_goal ?? o.expenditureGoal,
+    hydrationGoalL: p.hydration_goal_l ?? o.hydrationGoalL,
+    fastingGoalH: p.fasting_goal_h ?? o.fastingGoalH, targetWeightKg: p.target_weight_kg,
+  };
+  return { profile, theme: (p.prefs?.theme as Theme) ?? s.theme, palette: (p.prefs?.palette as Palette) ?? s.palette };
+}
 
 export const useStore = create<State>()(
   persist(
@@ -93,20 +150,24 @@ export const useStore = create<State>()(
       logs: {},
       weights: [],
       batches: [],
+      syncedBatchIds: [],
+      syncedDrafts: [],
+      syncedWeights: [],
+      deletedBatchIds: [],
       userId: null,
       userEmail: null,
       syncError: null,
 
       setView: (view) => set({ view }),
       setDate: (selectedDate) => set({ selectedDate }),
-      setTheme: (theme) => set({ theme }),
-      setPalette: (palette) => set({ palette }),
+      setTheme: (theme) => { set({ theme }); const u = get().userId; if (u) sync(set, () => pushProfile(u, get().profile, prefsOf(get()))); },
+      setPalette: (palette) => { set({ palette }); const u = get().userId; if (u) sync(set, () => pushProfile(u, get().profile, prefsOf(get()))); },
 
       setProfile: (patch) => {
         const profile = { ...get().profile, ...patch };
         set({ profile });
         const u = get().userId;
-        if (u) sync(set, () => pushProfile(u, profile));
+        if (u) sync(set, () => pushProfile(u, profile, prefsOf(get())));
       },
 
       getLog: (date) => get().logs[date] ?? emptyLog(date),
@@ -159,7 +220,7 @@ export const useStore = create<State>()(
         );
         set({ logs, batches: get().batches.map((b) => (b.id === id ? batch : b)) });
         const u = get().userId;
-        if (u) sync(set, async () => { await pushBatch(u, batch); for (const l of changed) if (l.submitted) await pushLog(u, l); });
+        if (u) sync(set, async () => { await pushBatchTracked(set, get, u, batch); for (const l of changed) if (l.submitted) await pushLog(u, l); });
       },
 
       removeMeal: (date, id) => {
@@ -175,7 +236,7 @@ export const useStore = create<State>()(
         const log = { ...get().getLog(date), submitted: true, updatedAt: now() };
         set((s) => ({ logs: { ...s.logs, [date]: log } }));
         const u = get().userId;
-        if (u) sync(set, async () => { await pushLog(u, log); await pushDraft(u, log); });
+        if (u) sync(set, async () => { await pushLog(u, log); await pushDraftTracked(set, get, u, log); });
       },
 
       setFastingDay: (date, on) => {
@@ -185,14 +246,14 @@ export const useStore = create<State>()(
           : { ...cur, fasted: false, submitted: false, updatedAt: now() };
         set((s) => ({ logs: { ...s.logs, [date]: log } }));
         const u = get().userId;
-        if (on && u) sync(set, async () => { await pushLog(u, log); await pushDraft(u, log); });
+        if (on && u) sync(set, async () => { await pushLog(u, log); await pushDraftTracked(set, get, u, log); });
         else queueDraft(set, get, date);
       },
 
       addBatch: (b) => {
         set((s) => ({ batches: [b, ...s.batches] }));
         const u = get().userId;
-        if (u) sync(set, () => pushBatch(u, b));
+        if (u) sync(set, () => pushBatchTracked(set, get, u, b));
       },
 
       consumeBatch: (id, fraction) => {
@@ -200,13 +261,16 @@ export const useStore = create<State>()(
         set({ batches });
         const u = get().userId;
         const b = batches.find((x) => x.id === id);
-        if (u && b) sync(set, () => pushBatch(u, b));
+        if (u && b) sync(set, () => pushBatchTracked(set, get, u, b));
       },
 
       removeBatch: (id) => {
-        set((s) => ({ batches: s.batches.filter((b) => b.id !== id) }));
+        set((s) => ({ batches: s.batches.filter((b) => b.id !== id), deletedBatchIds: addTo(s.deletedBatchIds, id) }));
         const u = get().userId;
-        if (u) sync(set, () => deleteRemoteBatch(u, id));
+        if (u) sync(set, async () => {
+          await deleteRemoteBatch(u, id);
+          set((s) => ({ deletedBatchIds: s.deletedBatchIds.filter((x) => x !== id), syncedBatchIds: s.syncedBatchIds.filter((x) => x !== id) }));
+        });
       },
 
       deleteLog: (date) => {
@@ -216,7 +280,7 @@ export const useStore = create<State>()(
           return { logs };
         });
         const u = get().userId;
-        if (u) sync(set, async () => { await deleteRemoteLog(u, date); await deleteRemoteDraft(u, date); });
+        if (u) sync(set, async () => { await deleteRemoteLog(u, date); await deleteRemoteDraft(u, date); set((s) => ({ syncedDrafts: s.syncedDrafts.filter((x) => x !== date) })); });
       },
 
       addWeight: (date, kg) => {
@@ -225,7 +289,7 @@ export const useStore = create<State>()(
         const latest = latestWeight(weights);
         set({ weights, profile: { ...get().profile, weightKg: latest.weightKg } });
         const u = get().userId;
-        if (u) sync(set, async () => { await pushWeight(u, w); await pushProfile(u, get().profile); });
+        if (u) sync(set, async () => { await pushWeight(u, w); set({ syncedWeights: addTo(get().syncedWeights, date) }); await pushProfile(u, get().profile, prefsOf(get())); });
       },
 
       removeWeight: (date) => {
@@ -233,7 +297,7 @@ export const useStore = create<State>()(
         const latest = latestWeight(weights);
         set({ weights, profile: latest ? { ...get().profile, weightKg: latest.weightKg } : get().profile });
         const u = get().userId;
-        if (u) sync(set, () => deleteRemoteWeight(u, date));
+        if (u) sync(set, async () => { await deleteRemoteWeight(u, date); set((s) => ({ syncedWeights: s.syncedWeights.filter((x) => x !== date) })); });
       },
 
       setUser: (userId, userEmail) => set({ userId, userEmail }),
@@ -251,10 +315,53 @@ export const useStore = create<State>()(
             if (!local || (d.updatedAt ?? "") > (local.updatedAt ?? "")) { logs[d.date] = { ...emptyLog(d.date), ...d }; changed = true; }
           }
           if (changed) set({ logs });
+          const synced = new Set(get().syncedDrafts);
+          const dropped: string[] = [];
           for (const l of Object.values(get().logs)) {
             const r = byDate.get(l.date);
-            if (l.updatedAt && (!r || l.updatedAt > (r.updatedAt ?? ""))) await pushDraft(u, l);
+            if (!r && synced.has(l.date)) { dropped.push(l.date); continue; } // deleted on another device
+            if (l.updatedAt && (!r || l.updatedAt > (r.updatedAt ?? ""))) await pushDraftTracked(set, get, u, l);
           }
+          if (dropped.length) {
+            const logs2 = { ...get().logs };
+            for (const d of dropped) delete logs2[d];
+            set({ logs: logs2 });
+          }
+          set({ syncedDrafts: addTo(remote.map((d) => d.date), ...get().syncedDrafts.filter((d) => !dropped.includes(d) && get().logs[d] && byDate.has(d))) });
+        } catch (e) {
+          set({ syncError: syncMessage(e) });
+        }
+      },
+
+      syncShared: async () => {
+        const u = get().userId;
+        if (!u) return;
+        try {
+          for (const id of get().deletedBatchIds) {
+            await deleteRemoteBatch(u, id);
+            set((s) => ({ deletedBatchIds: s.deletedBatchIds.filter((x) => x !== id) }));
+          }
+          const [rb, rw, rp] = await Promise.all([pullBatches(u), pullWeights(u), pullProfile(u)]);
+          if (rp) {
+            const a = applyProfileRow(get(), rp);
+            if (JSON.stringify([a.profile, a.theme, a.palette]) !== JSON.stringify([get().profile, get().theme, get().palette])) set(a);
+          }
+          const s = get();
+          const m = mergeBatches(s.batches, rb, s.syncedBatchIds, s.deletedBatchIds);
+          if (JSON.stringify(m.batches) !== JSON.stringify(s.batches)) set({ batches: m.batches });
+          set({ syncedBatchIds: m.synced });
+          for (const b of m.toPush) await pushBatchTracked(set, get, u, b);
+
+          const wr = new Set(rw.map((w) => w.date)), ws = new Set(s.syncedWeights);
+          const keep = s.weights.filter((w) => wr.has(w.date) || !ws.has(w.date));
+          const weights = [...rw, ...keep.filter((w) => !wr.has(w.date))];
+          const norm = (xs: WeightLog[]) => JSON.stringify([...xs].sort((a, b) => a.date.localeCompare(b.date)));
+          if (norm(weights) !== norm(s.weights)) {
+            const latest = latestWeight(weights);
+            set({ weights, ...(latest ? { profile: { ...get().profile, weightKg: latest.weightKg } } : {}) });
+          }
+          set({ syncedWeights: [...wr] });
+          for (const w of keep) if (!wr.has(w.date)) { await pushWeight(u, w); set({ syncedWeights: addTo(get().syncedWeights, w.date) }); }
         } catch (e) {
           set({ syncError: syncMessage(e) });
         }
@@ -267,30 +374,23 @@ export const useStore = create<State>()(
         const logs = { ...s.logs };
         // An unsubmitted local draft is never overwritten by the last submitted copy; syncDrafts resolves it.
         for (const l of r.logs) if (!(logs[l.date] && !logs[l.date].submitted)) logs[l.date] = l;
+        const sd = new Set(s.syncedDrafts), sw = new Set(s.syncedWeights);
+        // Submitted days that were synced before but are gone remotely were deleted on another device.
+        for (const l of Object.values(s.logs)) if (l.submitted && !remoteDates.has(l.date) && sd.has(l.date)) delete logs[l.date];
         const rw = new Set(r.weights.map((w) => w.date));
-        const weights = [...r.weights, ...s.weights.filter((w) => !rw.has(w.date))];
-        const rb = new Set(r.batches.map((b) => b.id));
-        const batches = [...r.batches, ...s.batches.filter((b) => !rb.has(b.id))];
-        let profile = s.profile;
-        if (r.profile) {
-          const p = r.profile;
-          profile = {
-            dob: p.dob, gender: p.gender ?? profile.gender, heightCm: p.height_cm ?? profile.heightCm,
-            weightKg: p.weight_kg ?? profile.weightKg, activity: p.activity_level ?? profile.activity,
-            unitSystem: p.unit_system ?? profile.unitSystem,
-            expenditureGoal: p.expenditure_goal ?? profile.expenditureGoal,
-            hydrationGoalL: p.hydration_goal_l ?? profile.hydrationGoalL,
-            fastingGoalH: p.fasting_goal_h ?? profile.fastingGoalH, targetWeightKg: p.target_weight_kg,
-          };
-        }
-        set({ logs, weights, profile, batches });
+        const weights = [...r.weights, ...s.weights.filter((w) => !rw.has(w.date) && !sw.has(w.date))];
+        const mb = mergeBatches(s.batches, r.batches, s.syncedBatchIds, s.deletedBatchIds);
+        const batches = mb.batches;
+        const { profile, theme, palette } = applyProfileRow(s, r.profile);
+        set({ logs, weights, profile, theme, palette, batches, syncedBatchIds: mb.synced, syncedWeights: [...rw] });
         const u = s.userId;
         if (!u) return;
         sync(set, async () => {
-          if (!r.profile) await pushProfile(u, profile);
-          for (const l of Object.values(s.logs)) if (l.submitted && !remoteDates.has(l.date)) await pushLog(u, l);
-          for (const w of s.weights) if (!rw.has(w.date)) await pushWeight(u, w);
-          for (const b of s.batches) if (!rb.has(b.id)) await pushBatch(u, b);
+          if (!r.profile) await pushProfile(u, profile, prefsOf(get()));
+          for (const l of Object.values(s.logs)) if (l.submitted && !remoteDates.has(l.date) && !sd.has(l.date)) await pushLog(u, l);
+          for (const w of s.weights) if (!rw.has(w.date) && !sw.has(w.date)) { await pushWeight(u, w); set({ syncedWeights: addTo(get().syncedWeights, w.date) }); }
+          for (const b of mb.toPush) await pushBatchTracked(set, get, u, b);
+          for (const id of s.deletedBatchIds) { await deleteRemoteBatch(u, id); set((x) => ({ deletedBatchIds: x.deletedBatchIds.filter((y) => y !== id) })); }
         });
       },
     }),
@@ -298,6 +398,7 @@ export const useStore = create<State>()(
       name: "thefoodrelationship-v1",
       partialize: (s) => ({
         theme: s.theme, palette: s.palette, profile: s.profile, logs: s.logs, weights: s.weights, batches: s.batches,
+        syncedBatchIds: s.syncedBatchIds, syncedDrafts: s.syncedDrafts, syncedWeights: s.syncedWeights, deletedBatchIds: s.deletedBatchIds,
       }),
       // Logs saved by older versions lack newer fields.
       merge: (persisted, current) => {

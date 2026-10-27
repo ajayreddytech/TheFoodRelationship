@@ -100,8 +100,10 @@ create table if not exists public.daily_drafts (
 alter table public.daily_drafts enable row level security;
 drop policy if exists "own drafts" on public.daily_drafts;
 create policy "own drafts" on public.daily_drafts for all
-create policy "own drafts" on public.daily_drafts for all
   using (auth.uid() = user_id) with check (auth.uid() = user_id);
 
 -- Some projects don't auto-grant API roles on new tables; RLS still limits rows to the owner.
-grant select, insert, update, delete on public.user_content, public.daily_drafts to authenticated;
+grant select, insert, update, delete on public.user_content, public.daily_drafts, public.cooked_batches to authenticated;
+
+-- Theme/palette preferences synced across devices
+alter table public.users_profile add column if not exists prefs jsonb default '{}'::jsonb;

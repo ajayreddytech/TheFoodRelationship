@@ -58,20 +58,23 @@ const mapList = (st: ContentData, list: List, id: string, f: (items: string[]) =
     : { guide: st.guide.map((c) => (c.id === id ? { ...c, points: f(c.points) } : c)) };
 
 let timer: ReturnType<typeof setTimeout> | undefined;
+/** True from a local edit until its upload finishes, so a background pull can't overwrite it. */
+let dirty = false;
 const pick = (s: ContentData): ContentData => ({ plans: s.plans, recipes: s.recipes, guide: s.guide, faqs: s.faqs });
 
 /** Debounced upload of all editable content for the signed-in user. */
 function schedulePush() {
+  dirty = true;
   clearTimeout(timer);
   timer = setTimeout(() => {
     const uid = useStore.getState().userId;
-    if (!uid) return;
+    if (!uid) { dirty = false; return; }
     pushContent(uid, pick(useContent.getState())).then(
-      () => useStore.setState({ syncError: null }),
-      (e: unknown) => useStore.setState({ syncError: syncMessage(e) }),
-    );
-  }, 500);
-}
+      () => { dirty = false; useStore.setState({ syncError: null }); },
+      (e: unknown) => { useStore.setState({ syncError: syncMessage(e) }); timer = setTimeout(schedulePush, 15000); },
+          );
+        }, 500);
+      }
 
 export const useContent = create<ContentState>()(
   persist(
@@ -117,14 +120,17 @@ export const useContent = create<ContentState>()(
         },
         // Remote wins; if the account has no row yet, this device's content is uploaded.
         hydrateContent: async (uid) => {
+          if (dirty) return; // local edits are still uploading; they win
           const r = await pullContent(uid);
+          if (dirty) return;
           if (!r) { await pushContent(uid, pick(get())); return; }
-          set({
+          const next = {
             plans: (r.plans as ContentData["plans"]) ?? get().plans,
             recipes: (r.recipes as RecipeCategory[] | null) ?? get().recipes,
             guide: (r.guide as GuideSection[] | null) ?? get().guide,
             faqs: (r.faqs as Faq[] | null) ?? get().faqs,
-          });
+          };
+          if (JSON.stringify(next) !== JSON.stringify(pick(get()))) set(next);
           get().pruneOldPlans();
         },
       };

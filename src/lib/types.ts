@@ -115,6 +115,7 @@ export interface WeightLog {
 }
 
 export interface UsersProfileRow {
+  prefs?: { theme?: string; palette?: string } | null;
   user_id: string;
   dob: string | null;
   gender: Gender | null;
