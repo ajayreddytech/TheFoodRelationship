@@ -6,6 +6,7 @@ import { FoodItem, MEAL_BUCKETS, MealBucket, ParsedFood, BUCKET_TIMES } from "@/
 import { scaleItem } from "@/lib/dates";
 import { correctInput } from "@/lib/parseClient";
 import { useRecorder } from "@/lib/useRecorder";
+import { rescaleItem, useItemBase } from "@/lib/rescale";
 import { Modal } from "./ui";
 
 interface Props {
@@ -24,6 +25,7 @@ export function ConfirmModal({ parsed, onClose, onConfirm }: Props) {
   const [transcript, setTranscript] = useState<string | undefined>();
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const { base, carry } = useItemBase();
 
   useEffect(() => {
     if (!parsed) return;
@@ -47,7 +49,10 @@ export function ConfirmModal({ parsed, onClose, onConfirm }: Props) {
     setBusy(false);
   });
 
-  const patch = (i: number, p: Partial<FoodItem>) => setItems((xs) => xs.map((x, j) => (j === i ? { ...x, ...p } : x)));
+  const patch = (i: number, p: Partial<FoodItem>) => setItems((xs) => xs.map((x, j) => (j === i ? carry(x, { ...x, ...p }) : x)));
+  // A quantity change re-derives calories and nutrients from the row's original values, so totals update as you type.
+  const setQuantity = (i: number, q: string) =>
+    setItems((xs) => xs.map((x, j) => (j === i ? carry(x, rescaleItem(base(x), q) ?? { ...x, quantity: q }) : x)));
   const setCalories = (i: number, cal: number) =>
     setItems((xs) => xs.map((x, j) => (j === i ? (x.calories > 0 ? scaleItem(x, cal / x.calories) : { ...x, calories: cal }) : x)));
   const total = items.reduce((s, i) => s + i.calories, 0);
@@ -85,7 +90,7 @@ export function ConfirmModal({ parsed, onClose, onConfirm }: Props) {
             {items.map((it, i) => (
               <tr key={i} className="border-t border-line">
                 <td className="py-1.5 pr-2"><input aria-label="Item" className="input" value={it.name} onChange={(e) => patch(i, { name: e.target.value })} /></td>
-                <td className="py-1.5 pr-2"><input aria-label="Quantity" className="input" value={it.quantity} onChange={(e) => patch(i, { quantity: e.target.value })} /></td>
+                <td className="py-1.5 pr-2"><input aria-label="Quantity" className="input" value={it.quantity} onChange={(e) => setQuantity(i, e.target.value)} /></td>
                 <td className="w-28 py-1.5 pr-2"><input aria-label="Calories" type="number" min={0} className="input" value={it.calories} onChange={(e) => setCalories(i, Math.max(0, Number(e.target.value) || 0))} /></td>
                 <td><button aria-label="Remove item" className="p-2 text-subtle hover:text-bad" onClick={() => setItems((xs) => xs.filter((_, j) => j !== i))}><Trash2 size={16} /></button></td>
               </tr>

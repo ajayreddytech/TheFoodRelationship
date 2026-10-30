@@ -87,7 +87,8 @@ function BatchRow({ b, onEat, onEdit }: { b: CookedBatch } & Handlers) {
           )}
         </div>
       )}
-      <NutrientModal kind={profile} subtitle={`${b.name} · whole batch`} items={[b.total]} calories={b.total.calories} onClose={() => setProfile(null)} />
+      {/* Sources come from the constituent ingredients, so the top-5 lists name what actually supplies each nutrient. */}
+      <NutrientModal kind={profile} subtitle={`${b.name} · whole batch`} items={b.ingredients} calories={b.total.calories} onClose={() => setProfile(null)} />
     </div>
   );
 }

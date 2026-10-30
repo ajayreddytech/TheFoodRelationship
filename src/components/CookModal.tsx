@@ -6,6 +6,7 @@ import { FoodItem } from "@/lib/types";
 import { scaleItem } from "@/lib/dates";
 import { correctInput, type CookDraft } from "@/lib/parseClient";
 import { useRecorder } from "@/lib/useRecorder";
+import { rescaleItem, useItemBase } from "@/lib/rescale";
 import { Modal } from "./ui";
 
 interface Props {
@@ -22,6 +23,7 @@ export function CookModal({ draft, onClose, onSave }: Props) {
   const [transcript, setTranscript] = useState<string | undefined>();
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const { base, carry } = useItemBase();
 
   useEffect(() => {
     if (!draft) return;
@@ -48,7 +50,9 @@ export function CookModal({ draft, onClose, onSave }: Props) {
   });
 
   const total = items.reduce((s, i) => s + i.calories, 0);
-  const patch = (i: number, p: Partial<FoodItem>) => setItems((xs) => xs.map((x, j) => (j === i ? { ...x, ...p } : x)));
+  const patch = (i: number, p: Partial<FoodItem>) => setItems((xs) => xs.map((x, j) => (j === i ? carry(x, { ...x, ...p }) : x)));
+  // The batch total is summed from these rows, so a quantity change moves the whole-batch figures immediately.
+  const setQuantity = (i: number, q: string) => setItems((xs) => xs.map((x, j) => (j === i ? carry(x, rescaleItem(base(x), q) ?? { ...x, quantity: q }) : x)));
   const setCal = (i: number, cal: number) => setItems((xs) => xs.map((x, j) => (j === i ? (x.calories > 0 ? scaleItem(x, cal / x.calories) : { ...x, calories: cal }) : x)));
   const w = Number(weight) > 0 ? Number(weight) : null;
   const s = Number(servings) > 0 ? Number(servings) : null;
@@ -76,7 +80,7 @@ export function CookModal({ draft, onClose, onSave }: Props) {
             {items.map((it, i) => (
               <tr key={i} className="border-t border-line">
                 <td className="py-1.5 pr-2"><input aria-label="Ingredient" className="input" value={it.name} onChange={(e) => patch(i, { name: e.target.value })} /></td>
-                <td className="py-1.5 pr-2"><input aria-label="Quantity" className="input" value={it.quantity} onChange={(e) => patch(i, { quantity: e.target.value })} /></td>
+                <td className="py-1.5 pr-2"><input aria-label="Quantity" className="input" value={it.quantity} onChange={(e) => setQuantity(i, e.target.value)} /></td>
                 <td className="w-28 py-1.5 pr-2"><input aria-label="Calories" type="number" min={0} className="input" value={it.calories} onChange={(e) => setCal(i, Math.max(0, Number(e.target.value) || 0))} /></td>
                 <td><button aria-label="Remove ingredient" className="p-2 text-subtle hover:text-bad" onClick={() => setItems((xs) => xs.filter((_, j) => j !== i))}><Trash2 size={16} /></button></td>
               </tr>

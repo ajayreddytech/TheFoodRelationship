@@ -10,7 +10,7 @@ const ITEM_SHAPE = `{"name":string,"quantity":string,"calories":number,
   "micros":{${MICRO_KEYS.map((k) => `"${k}":n`).join(",")}}}`;
 
 const COMMON = `All nutrient numbers are totals for the stated quantity (not per 100g). Use realistic estimates; use 0 when unknown or not applicable. Units are in the key names (g, mg, mcg, ml). Return ONLY JSON, no prose or markdown.
-Recognise branded products and use that brand's published nutrition when you know it (e.g. "Whittaker's chocolate", "Chapman's butterscotch ice cream", "Chapman's caramel praline ice cream"); put the brand in the item name. Never invent a brand the user did not say.
+Recognise branded products and use that brand's published nutrition when you know it (e.g. "Whittaker's chocolate", "Chapman's butterscotch ice cream", "Chapman's caramel praline ice cream"); put the brand in the item name. When the user names a brand or variant, match that exact product's label values for the stated serving and never substitute a generic equivalent; only fall back to a generic estimate when you do not know that product's label. Never invent a brand the user did not say.
 If audio is provided, first transcribe it faithfully and put the transcript in "transcript"; otherwise set "transcript" to the user's text.`;
 
 const BUCKET_TEXT = MEAL_BUCKETS.map((b) => `${b} (${BUCKET_TIMES[b]})`).join("; ");
@@ -73,6 +73,15 @@ function sanitizeItems(items: unknown) {
 
 const json = (error: string, status: number) => NextResponse.json({ error }, { status });
 
+/** Pulls the JSON object out of a model reply, tolerating ```json fences and stray prose around it. */
+function extractJson(out: string) {
+  const t = out.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "");
+  try { return JSON.parse(t); } catch { /* fall back to the outermost braces */ }
+  const s = t.indexOf("{"), e = t.lastIndexOf("}");
+  if (s < 0 || e <= s) throw new Error("No JSON object in model reply");
+  return JSON.parse(t.slice(s, e + 1));
+}
+
 interface Body {
   text?: unknown;
   hour?: unknown;
@@ -126,35 +135,48 @@ export async function POST(req: Request) {
   const models = [primary, ...(process.env.GEMINI_FALLBACK_MODELS ?? "gemini-3.5-flash,gemini-3.1-flash-lite").split(",").map((s) => s.trim()).filter(Boolean)]
     .filter((m, i, a) => a.indexOf(m) === i);
 
-  let res: Response | null = null;
-  outer: for (const model of models) {
-    for (let attempt = 0; attempt < 2; attempt++) {
-      try {
-        res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
-          body: payload,
-          signal: AbortSignal.timeout(15000),
-        });
-      } catch {
-        res = null;
-        continue outer;
+  const ask = async (): Promise<Response | null> => {
+    let res: Response | null = null;
+    outer: for (const model of models) {
+      for (let attempt = 0; attempt < 2; attempt++) {
+        try {
+          res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
+            body: payload,
+            signal: AbortSignal.timeout(15000),
+          });
+        } catch {
+          res = null;
+          continue outer;
+        }
+        if (res.ok) break outer;
+        if (res.status === 503 || res.status === 429) {
+          await new Promise((r) => setTimeout(r, 300 * (attempt + 1)));
+          continue;
+        }
+        continue outer; // 404 / 400 etc: try next model
       }
-      if (res.ok) break outer;
-      if (res.status === 503 || res.status === 429) {
-        await new Promise((r) => setTimeout(r, 300 * (attempt + 1)));
-        continue;
-      }
-      continue outer; // 404 / 400 etc: try next model
+    }
+    return res;
+  };
+
+  // A reply that isn't valid JSON is retried once with a fresh call before the user sees an error.
+  let raw: any = null;
+  for (let attempt = 0; attempt < 2 && raw == null; attempt++) {
+    const res = await ask();
+    if (!res) return json("The AI service timed out. Please try again.", 504);
+    if (!res.ok) return json(res.status === 503 || res.status === 429 ? "The AI service is busy right now. Please try again in a moment." : `Gemini request failed (${res.status}).`, 502);
+    try {
+      const data = await res.json();
+      raw = extractJson(data?.candidates?.[0]?.content?.parts?.[0]?.text ?? "");
+    } catch {
+      raw = null;
     }
   }
-  if (!res) return json("The AI service timed out. Please try again.", 504);
-  if (!res.ok) return json(res.status === 503 || res.status === 429 ? "The AI service is busy right now. Please try again in a moment." : `Gemini request failed (${res.status}).`, 502);
+  if (raw == null) return json("Could not understand the AI response. Please try again.", 502);
 
   try {
-    const data = await res.json();
-    const out = data?.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
-    const raw = JSON.parse(out);
     const transcript = typeof raw?.transcript === "string" ? raw.transcript.slice(0, 2000) : text;
     const bucket = MEAL_BUCKETS.includes(raw?.target_bucket) ? raw.target_bucket : null;
 

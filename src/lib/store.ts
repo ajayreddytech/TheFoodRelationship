@@ -96,6 +96,18 @@ async function pushBatchTracked(set: (p: Partial<State>) => void, get: () => Sta
   } finally { batchInflight.delete(b.id); }
 }
 
+/** Per-batch push chain: uploads run one after another and always send the latest local state, so a slow earlier response can't roll `remaining` back. */
+const batchQueue = new Map<string, Promise<void>>();
+function queueBatchPush(set: (p: Partial<State>) => void, get: () => State, u: string, id: string) {
+  const send = async () => {
+    const b = get().batches.find((x) => x.id === id);
+    if (b) await pushBatchTracked(set, get, u, b);
+  };
+  const next = (batchQueue.get(id) ?? Promise.resolve()).then(send, send);
+  batchQueue.set(id, next);
+  return next.finally(() => { if (batchQueue.get(id) === next) batchQueue.delete(id); });
+}
+
 async function pushDraftTracked(set: (p: Partial<State>) => void, get: () => State, u: string, log: DailyLog) {
   await pushDraft(u, log);
   set({ syncedDrafts: addTo(get().syncedDrafts, log.date) });
@@ -220,7 +232,7 @@ export const useStore = create<State>()(
         );
         set({ logs, batches: get().batches.map((b) => (b.id === id ? batch : b)) });
         const u = get().userId;
-        if (u) sync(set, async () => { await pushBatchTracked(set, get, u, batch); for (const l of changed) if (l.submitted) await pushLog(u, l); });
+        if (u) sync(set, async () => { await queueBatchPush(set, get, u, id); for (const l of changed) if (l.submitted) await pushLog(u, l); });
       },
 
       removeMeal: (date, id) => {
@@ -257,11 +269,14 @@ export const useStore = create<State>()(
       },
 
       consumeBatch: (id, fraction) => {
-        const batches = get().batches.map((b) => (b.id === id ? { ...b, remaining: Math.max(0, Math.round((b.remaining - fraction) * 1000) / 1000) } : b));
-        set({ batches });
+        const cur = get().batches.find((b) => b.id === id);
+        if (!cur) return;
+        const remaining = Math.max(0, Math.round((cur.remaining - fraction) * 1000) / 1000);
+        // Auto-cleanup: a batch with nothing left leaves the active inventory (removeBatch also deletes it remotely).
+        if (remaining <= 0) { get().removeBatch(id); return; }
+        set((s) => ({ batches: s.batches.map((b) => (b.id === id ? { ...b, remaining } : b)) }));
         const u = get().userId;
-        const b = batches.find((x) => x.id === id);
-        if (u && b) sync(set, () => pushBatchTracked(set, get, u, b));
+        if (u) sync(set, () => queueBatchPush(set, get, u, id));
       },
 
       removeBatch: (id) => {

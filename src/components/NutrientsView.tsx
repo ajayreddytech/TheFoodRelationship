@@ -5,9 +5,9 @@ import { AlertOctagon, AlertTriangle, CheckCircle2, ChevronDown, Flame, Lightbul
 import { useStore } from "@/lib/store";
 import { windowFor, Gran } from "@/lib/period";
 import { todayISO, datesBetween } from "@/lib/dates";
-import { aggregateNutrients, dietaryInsights, nutrientStatus } from "@/lib/analytics";
+import { aggregateNutrients, dietaryInsights, nutrientStatus, NutrientAgg } from "@/lib/analytics";
 import { calcAge } from "@/lib/calc";
-import { NUTRIENTS, NutrientDef, NutrientGroup } from "@/lib/nutrients";
+import { NUTRIENTS, NutrientDef, NutrientGroup, isUnwanted } from "@/lib/nutrients";
 import { motion } from "framer-motion";
 import { fmt, PageHeader, PeriodControls, Section } from "./ui";
 import { SourcesModal } from "./SourcesModal";
@@ -19,11 +19,35 @@ export const TONE = {
   bad: { label: "Needs work", chip: "bg-bad/15 text-bad", grad: "from-rose-400 to-bad", box: "border-bad/40 bg-bad/10", text: "text-bad", Icon: AlertOctagon, status: "Off target" },
 };
 export const SCALE = 1.5; // bar spans 0-150% of target; the marker sits at 100%
+
+/** One nutrient with its running average against the personal target. Opens the top-sources list on click. */
+function NutrientTile({ n, a, onOpen }: { n: NutrientDef; a: NutrientAgg; onOpen: (n: NutrientDef) => void }) {
+  const ratio = a.rda ? a.avg / a.rda : 0;
+  const t = TONE[nutrientStatus(n.limit, ratio)];
+  const fill = Math.min(ratio, SCALE) / SCALE;
+  return (
+    <div role="button" tabIndex={0} aria-label={`${n.label}: show top sources`} onClick={() => onOpen(n)}
+      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onOpen(n); } }}
+      className="cursor-pointer rounded-2xl border border-line bg-muted/30 p-3 transition hover:border-brand/50">
+      <div className="flex items-center justify-between gap-2">
+        <span className="font-medium">{n.label}{n.limit && <span className="ml-1 text-[10px] text-subtle">(limit)</span>}</span>
+        <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${t.chip}`}>{t.status} · {Math.round(ratio * 100)}%</span>
+      </div>
+      <div className="relative mt-3 h-4 w-full rounded-full bg-muted shadow-inner" role="progressbar" aria-label={n.label} aria-valuenow={Math.round(ratio * 100)} aria-valuemax={100}>
+        <motion.div className={`h-full rounded-full bg-gradient-to-r shadow ${t.grad}`} initial={false} animate={{ width: `${fill * 100}%` }} transition={{ type: "spring", stiffness: 110, damping: 18 }} />
+        <div className="absolute -bottom-1 -top-1 w-0.5 rounded bg-fg/60" style={{ left: `${(1 / SCALE) * 100}%` }} title="Target" />
+      </div>
+      <div className="mt-1.5 text-xs tabular-nums text-subtle">{fmt(a.avg, a.avg < 10 ? 1 : 0)} of {fmt(a.rda, a.rda < 10 ? 1 : 0)} {n.unit}</div>
+    </div>
+  );
+}
+
 export function NutrientsView() {
   const { logs, profile } = useStore();
   const [gran, setGran] = useState<Gran>("day");
   const [openTone, setOpenTone] = useState<Record<string, boolean>>({});
-  const [closed, setClosed] = useState<Record<string, boolean>>({});
+  // Nutrient groups start collapsed; a group is open only once the user expands it.
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
   const [src, setSrc] = useState<NutrientDef | null>(null);
   const [anchor, setAnchor] = useState(todayISO());
   const w = windowFor(gran, anchor, 1);
@@ -81,40 +105,30 @@ export function NutrientsView() {
                   </div>
                 );
               })}
-            </div>          </Section>
+            </div>
+          </Section>
 
           {GROUPS.map((g) => {
-            const defs = NUTRIENTS.filter((n) => n.group === g);
+            // Limit nutrients live in the drop-down below, not in their group.
+            const defs = NUTRIENTS.filter((n) => n.group === g && !isUnwanted(n));
             if (!defs.length) return null;
-            const isClosed = !!closed[g];
+            const isOpen = !!openGroups[g];
             return (
-              <Section key={g} title={g} icon={<Microscope size={18} />} collapsed={isClosed}
-                right={<button aria-label={`${isClosed ? "Expand" : "Collapse"} ${g}`} aria-expanded={!isClosed} className="btn-ghost !p-2" onClick={() => setClosed((c) => ({ ...c, [g]: !c[g] }))}><ChevronDown size={16} className={`transition ${isClosed ? "" : "rotate-180"}`} /></button>}>
+              <Section key={g} title={g} icon={<Microscope size={18} />} collapsed={!isOpen}
+                right={<button aria-label={`${isOpen ? "Collapse" : "Expand"} ${g}`} aria-expanded={isOpen} className="btn-ghost !p-2" onClick={() => setOpenGroups((o) => ({ ...o, [g]: !o[g] }))}><ChevronDown size={16} className={`transition ${isOpen ? "rotate-180" : ""}`} /></button>}>
                 <div className="grid gap-3 md:grid-cols-2">
-                  {defs.map((n) => {
-                    const a = aggs.find((x) => x.key === n.key)!;
-                    const ratio = a.rda ? a.avg / a.rda : 0;
-                    const t = TONE[nutrientStatus(n.limit, ratio)];
-                    const fill = Math.min(ratio, SCALE) / SCALE;
-                    return (
-                      <div key={n.key} role="button" tabIndex={0} aria-label={`${n.label}: show top sources`} onClick={() => setSrc(n)}
-                        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setSrc(n); } }}
-                        className="cursor-pointer rounded-2xl border border-line bg-muted/30 p-3 transition hover:border-brand/50">
-                        <div className="flex items-center justify-between gap-2">
-                          <span className="font-medium">{n.label}{n.limit && <span className="ml-1 text-[10px] text-subtle">(limit)</span>}</span>
-                          <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${t.chip}`}>{t.status} · {Math.round(ratio * 100)}%</span>
-                        </div>
-                        <div className="relative mt-3 h-4 w-full rounded-full bg-muted shadow-inner" role="progressbar" aria-label={n.label} aria-valuenow={Math.round(ratio * 100)} aria-valuemax={100}>
-                          <motion.div className={`h-full rounded-full bg-gradient-to-r shadow ${t.grad}`} initial={false} animate={{ width: `${fill * 100}%` }} transition={{ type: "spring", stiffness: 110, damping: 18 }} />
-                          <div className="absolute -bottom-1 -top-1 w-0.5 rounded bg-fg/60" style={{ left: `${(1 / SCALE) * 100}%` }} title="Target" />
-                        </div>
-                        <div className="mt-1.5 text-xs tabular-nums text-subtle">{fmt(a.avg, a.avg < 10 ? 1 : 0)} of {fmt(a.rda, a.rda < 10 ? 1 : 0)} {n.unit}</div>
-                      </div>
-                    );                  })}
+                  {defs.map((n) => <NutrientTile key={n.key} n={n} a={aggs.find((x) => x.key === n.key)!} onOpen={setSrc} />)}
                 </div>
               </Section>
             );
           })}
+
+          <Section title="The best keep these low" subtitle="Keep these under their upper limits" icon={<AlertOctagon size={18} />} collapsed={!openGroups.unwanted}
+            right={<button aria-label={`${openGroups.unwanted ? "Collapse" : "Expand"} the best keep these low`} aria-expanded={!!openGroups.unwanted} className="btn-ghost !p-2" onClick={() => setOpenGroups((o) => ({ ...o, unwanted: !o.unwanted }))}><ChevronDown size={16} className={`transition ${openGroups.unwanted ? "rotate-180" : ""}`} /></button>}>
+            <div className="grid gap-3 md:grid-cols-2">
+              {NUTRIENTS.filter(isUnwanted).map((n) => <NutrientTile key={n.key} n={n} a={aggs.find((x) => x.key === n.key)!} onOpen={setSrc} />)}
+            </div>
+          </Section>
         </>
       )}
       <SourcesModal nutrient={src} items={periodItems} subtitle={w.label} perDay={days} onClose={() => setSrc(null)} />

@@ -7,8 +7,11 @@ import { ACTIVITY_FACTORS, BMI_CLASSES, bmiClass, bmiCategory, calcAge, calcBMI,
 import { signInWithGoogle, signOut, supabaseConfigured } from "@/lib/supabase";
 import { todayISO } from "@/lib/dates";
 import { ActivityLevel, Gender, Palette } from "@/lib/types";
+import { useContent } from "@/lib/contentStore";
+import { toTitleCase } from "@/lib/text";
 import { PageHeader, fmt } from "./ui";
 import { ChartCard } from "./charts";
+import { ModuleManager } from "./ModuleManager";
 
 function NumField({ id, label, value, onCommit, step = "any" }: { id: string; label: string; value: number; onCommit: (n: number) => void; step?: string }) {
   const [txt, setTxt] = useState<string | null>(null);
@@ -31,6 +34,7 @@ const ACTIVITY_LABELS: Record<ActivityLevel, string> = {
 
 export function SettingsView() {
   const s = useStore();
+  const { recipes, guide, addModule, renameModule, removeModule } = useContent();
   const p = s.profile;
   const imperial = p.unitSystem === "imperial";
   const [authErr, setAuthErr] = useState<string | null>(null);
@@ -46,7 +50,7 @@ export function SettingsView() {
 
       <section className="card flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="font-semibold">Account</h2>
+          <h2 className="font-semibold">{toTitleCase("Account")}</h2>
           <p className="text-sm text-subtle">{s.userEmail ? `Signed in as ${s.userEmail}. Data syncs to the cloud.` : supabaseConfigured ? "Guest mode — data is stored on this device." : "Guest mode — cloud sync unavailable (Supabase not configured)."}</p>
           {authErr && <p role="alert" className="mt-1 text-sm text-bad">{authErr}</p>}
         </div>
@@ -56,7 +60,7 @@ export function SettingsView() {
       </section>
 
       <section className="card grid gap-3 sm:grid-cols-2">
-        <h2 className="font-semibold sm:col-span-2">Health profile</h2>
+        <h2 className="font-semibold sm:col-span-2">{toTitleCase("Health profile")}</h2>
         <div><label className="label" htmlFor="dob">Date of birth</label>
           <input id="dob" type="date" max={todayISO()} className="input" value={p.dob ?? ""} onChange={(e) => s.setProfile({ dob: e.target.value || null })} /></div>
         <div><label className="label" htmlFor="gender">Gender</label>
@@ -76,7 +80,7 @@ export function SettingsView() {
       </section>
 
       <section className="card space-y-2">
-        <h2 className="font-semibold">BMI classification</h2>
+        <h2 className="font-semibold">{toTitleCase("BMI classification")}</h2>
         <div className="grid gap-1.5 sm:grid-cols-2">
           {BMI_CLASSES.map((c) => {
             const on = bmiClass(bmi)?.label === c.label;
@@ -93,14 +97,23 @@ export function SettingsView() {
       <ChartCard title="BMI progress" subtitle="Calculated from every weight you have logged and your current height" icon={<Activity size={18} />} color="rgb(16 185 129)" data={bmiSeries} unit="BMI" decimals={1} goal={24.9} goalLabel="Healthy max 24.9" />
 
       <section className="card grid gap-3 sm:grid-cols-3">
-        <h2 className="font-semibold sm:col-span-3">Daily goals</h2>
+        <h2 className="font-semibold sm:col-span-3">{toTitleCase("Daily goals")}</h2>
         <NumField id="eg" label="Expenditure goal (kcal)" value={p.expenditureGoal} onCommit={(n) => s.setProfile({ expenditureGoal: n })} />
         <NumField id="hg" label="Hydration goal (L)" value={p.hydrationGoalL} step="0.1" onCommit={(n) => s.setProfile({ hydrationGoalL: n })} />
         <NumField id="fg" label="Fasting goal (hours)" value={p.fastingGoalH} onCommit={(n) => s.setProfile({ fastingGoalH: Math.min(24, n) })} />
       </section>
 
       <section className="card space-y-3">
-        <h2 className="font-semibold">Appearance</h2>
+        <h2 className="font-semibold">{toTitleCase("Modules")}</h2>
+        <p className="text-sm text-subtle">Add, rename or delete the sections shown in Recipes and Guide.</p>
+        <div className="space-y-3">
+          <ModuleManager label="Recipe modules" modules={recipes} onAdd={(t, e) => addModule("recipes", t, e)} onRename={(id, t, e) => renameModule("recipes", id, t, e)} onRemove={(id) => removeModule("recipes", id)} />
+          <ModuleManager label="Guide modules" modules={guide} onAdd={(t, e) => addModule("guide", t, e)} onRename={(id, t, e) => renameModule("guide", id, t, e)} onRemove={(id) => removeModule("guide", id)} />
+        </div>
+      </section>
+
+      <section className="card space-y-3">
+        <h2 className="font-semibold">{toTitleCase("Appearance")}</h2>
         <div className="flex flex-wrap items-center gap-3">
           <button className="btn-ghost" onClick={() => s.setTheme(s.theme === "dark" ? "light" : "dark")}>{s.theme === "dark" ? <Sun size={16} /> : <Moon size={16} />}{s.theme === "dark" ? "Light mode" : "Dark mode"}</button>
           {PALETTES.map((x) => (

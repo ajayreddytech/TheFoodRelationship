@@ -58,6 +58,14 @@ interface Correction {
 
 export interface CorrectionResult extends CorrectionContext { transcript?: string }
 
+/** Reads a route reply. A non-JSON body (e.g. a gateway error page) becomes a readable message instead of a parse crash. */
+async function readReply(res: Response): Promise<any> {
+  const data = await res.json().catch(() => null);
+  if (!data) throw new Error(res.ok ? "The AI response was unreadable. Please try again." : "The server couldn't process that. Please try again.");
+  if (!res.ok) throw new Error(data.error ?? "Could not parse that.");
+  return data;
+}
+
 /**
  * Re-speak: sends the CURRENT table plus the new recording, and applies only the spoken changes to it.
  * Rows the user did not mention are left exactly as they were.
@@ -81,9 +89,7 @@ export async function correctInput(audio: RecordedAudio, ctx: CorrectionContext,
   } catch {
     throw new Error("You appear to be offline. Check your connection and try again.");
   }
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data?.error ?? "Could not parse that.");
-  const c = data as Correction;
+  const c = (await readReply(res)) as Correction;
 
   const rm = new Set(c.remove.map((r) => `${r.block}:${r.index}`));
   const up = new Map(c.update.map((u) => [`${u.block}:${u.index}`, u.item]));
@@ -125,8 +131,7 @@ export async function parseInput(input: { text?: string; audio?: RecordedAudio; 
   } catch {
     throw new Error("You appear to be offline. Check your connection and try again.");
   }
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data?.error ?? "Could not parse that.");
+  const data = await readReply(res);
 
   if (data.kind === "cook_update") {
     const b = useStore.getState().batches.find((x) => x.id === data.batch_id);

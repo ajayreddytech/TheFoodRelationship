@@ -18,6 +18,7 @@ import { MealsModal } from "./MealsModal";
 import { CommandBar } from "./CommandBar";
 import { NutrientModal } from "./NutrientModal";
 import { useContent } from "@/lib/contentStore";
+import { toTitleCase } from "@/lib/text";
 
 
 const QUOTES = [
@@ -52,12 +53,12 @@ function InputRow({ kind, label, children, tone }: { kind: MetricKind; label: st
   );
 }
 
-function BigStat({ kind, label, value, unit, sub, color }: { kind: MetricKind; label: string; value: string; unit: string; sub: string; color?: string }) {
+function BigStat({ kind, label, value, unit, sub, color, note }: { kind: MetricKind; label: string; value: string; unit: string; sub: string; color?: string; note?: string }) {
   const { Icon, text } = METRICS[kind];
   return (
     <div className="rounded-2xl border border-line bg-muted/40 p-4">
-      <div className="flex items-center gap-2 text-sm text-subtle"><Icon size={16} className={text} />{label}</div>
-      <div className={`mt-1 text-4xl font-bold tabular-nums ${color ?? ""}`}>{value}<span className="ml-1 text-base font-medium text-subtle">{unit}</span></div>
+      <div className="flex items-center gap-2 text-sm text-subtle"><Icon size={16} className={text} />{toTitleCase(label)}</div>
+      <div className={`mt-1 text-4xl font-bold tabular-nums ${color ?? ""}`}>{value}<span className="ml-1 text-base font-medium text-subtle">{unit}</span>{note && <span className="ml-2 align-middle text-xs font-normal text-subtle">({note})</span>}</div>
       <div className="mt-0.5 text-xs text-subtle">{sub}</div>
     </div>
   );
@@ -245,11 +246,14 @@ export function LogView() {
               <div role="alert" className={`flex items-center gap-2 rounded-xl border-2 px-3 py-2 text-sm font-semibold ${alert.cls}`}><AlertTriangle size={18} />{alert.text}</div>
             )}
             <BigStat kind="intake" label={remaining >= 0 ? "Calories remaining for today" : "Calories over today"} value={fmt(Math.abs(remaining))} unit="kcal"
-              sub={`${fmt(intake)} eaten of ${fmt(target)}`} color={pct >= 1 ? "text-bad" : pct >= 0.85 ? "text-bad" : pct >= 0.7 ? "text-mid" : ""} />
+              sub={`${fmt(intake)} eaten of ${fmt(target)}`} note={`Ate ${fmt(intake)} kcal, ${remaining >= 0 ? `${fmt(remaining)} more to go` : `${fmt(-remaining)} over`}`}
+              color={pct >= 1 ? "text-bad" : pct >= 0.85 ? "text-bad" : pct >= 0.7 ? "text-mid" : ""} />
             <ProgressBar value={intake} max={target} color={pct >= 0.85 ? "bg-bad" : pct >= 0.7 ? "bg-mid" : "bg-brand"} />
-            <BigStat kind="expenditure" label="Remaining to burn" value={fmt(Math.max(0, profile.expenditureGoal - log.expenditure))} unit="kcal" sub={`${fmt(log.expenditure)} of ${fmt(profile.expenditureGoal)} goal`} />
+            <BigStat kind="expenditure" label="Remaining to burn" value={fmt(Math.max(0, profile.expenditureGoal - log.expenditure))} unit="kcal" sub={`${fmt(log.expenditure)} of ${fmt(profile.expenditureGoal)} goal`}
+              note={`Burned ${fmt(log.expenditure)} kcal, ${fmt(Math.max(0, profile.expenditureGoal - log.expenditure))} more to go`} />
             <ProgressBar value={log.expenditure} max={profile.expenditureGoal} color="bg-orange-500" />
-            <BigStat kind="hydration" label="Remaining to drink" value={Math.max(0, profile.hydrationGoalL - log.hydrationL).toFixed(1)} unit="L" sub={`${log.hydrationL.toFixed(1)} of ${profile.hydrationGoalL} L goal`} />
+            <BigStat kind="hydration" label="Remaining to drink" value={Math.max(0, profile.hydrationGoalL - log.hydrationL).toFixed(1)} unit="L" sub={`${log.hydrationL.toFixed(1)} of ${profile.hydrationGoalL} L goal`}
+              note={`Drank ${log.hydrationL.toFixed(1)} L, ${Math.max(0, profile.hydrationGoalL - log.hydrationL).toFixed(1)} L more to go`} />
             <ProgressBar value={log.hydrationL} max={profile.hydrationGoalL} color="bg-sky-500" />
           </div>
         </Section>

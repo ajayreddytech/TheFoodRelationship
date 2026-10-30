@@ -1,16 +1,22 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { Fragment, useMemo, useState } from "react";
 import { BarChart3, Check, Cookie, Hand, Salad, X } from "lucide-react";
 import { useStore } from "@/lib/store";
-import { Gran, buildSeries, windowFor } from "@/lib/period";
-import { addDays, datesBetween, parseISODate, todayISO } from "@/lib/dates";
+import { Gran, windowFor } from "@/lib/period";
+import { datesBetween, parseISODate, toISODate, todayISO } from "@/lib/dates";
 import { dayPoints, extraInsights, summarize, calorieTarget, DayPoint } from "@/lib/analytics";
 import { fmt, PageHeader, PeriodControls, Section } from "./ui";
-import { ChartCard } from "./charts";
+import { PagedChart } from "./PagedChart";
 import { GYR_STYLE, METRICS, MetricKind, MetricIcon } from "./icons";
 
 type Cell = { date: string; point?: DayPoint; future: boolean };
+
+// Module-level so PagedChart's memo sees stable callbacks.
+const pickIntake = (p: DayPoint) => p.intake;
+const pickExpenditure = (p: DayPoint) => p.expenditure;
+const pickHydration = (p: DayPoint) => p.hydration;
+const pickFasting = (p: DayPoint) => p.fasting;
 
 function Heatmap({ kind, gran, from, to, points }: { kind: "gyr" | "nibbles"; gran: Gran; from: string; to: string; points: DayPoint[] }) {
   const map = new Map(points.map((p) => [p.date, p]));
@@ -39,12 +45,28 @@ function Heatmap({ kind, gran, from, to, points }: { kind: "gyr" | "nibbles"; gr
   };
 
   if (gran === "year") {
-    const start = addDays(from, -parseISODate(from).getDay());
-    const all = datesBetween(start, to);
-    const cols = Math.ceil(all.length / 7);
+    // Row-wise: one row per month, January at the top, day-of-month across. Fixed 31 columns keep it inside the container.
+    const year = parseISODate(from).getFullYear();
     return (
-      <div className="grid w-full gap-[3px]" style={{ gridTemplateColumns: `repeat(${cols}, 1fr)`, gridTemplateRows: "repeat(7, 1fr)", gridAutoFlow: "column", aspectRatio: `${cols} / 7`, maxHeight: "16rem" }}>
-        {all.map((d) => { const c = mk(d); return <div key={d} className={`group relative rounded-[3px] hover:z-20 ${d < from ? "pointer-events-none opacity-0" : style(c)}`}><span role="tooltip" className="pointer-events-none absolute bottom-full left-1/2 z-30 mb-1 hidden -translate-x-1/2 whitespace-nowrap rounded-lg border border-line bg-surface px-2 py-1 text-[11px] font-medium text-fg shadow-lg group-hover:block">{title(c)}</span></div>; })}
+      <div className="grid w-full gap-[3px]" style={{ gridTemplateColumns: "auto repeat(31, minmax(0, 1fr))" }}>
+        {Array.from({ length: 12 }, (_, m) => {
+          const daysInMonth = new Date(year, m + 1, 0).getDate();
+          return (
+            <Fragment key={m}>
+              <span className="self-center pr-1 text-[10px] font-medium leading-none text-subtle">{new Date(year, m, 1).toLocaleDateString(undefined, { month: "short" })}</span>
+              {Array.from({ length: 31 }, (_, di) => {
+                if (di >= daysInMonth) return <div key={di} />;
+                const d = toISODate(new Date(year, m, di + 1));
+                const c = mk(d);
+                return (
+                  <div key={d} className={`group relative aspect-square rounded-[3px] hover:z-20 ${style(c)}`}>
+                    <span role="tooltip" className="pointer-events-none absolute bottom-full left-1/2 z-30 mb-1 hidden -translate-x-1/2 whitespace-nowrap rounded-lg border border-line bg-surface px-2 py-1 text-[11px] font-medium text-fg shadow-lg group-hover:block">{title(c)}</span>
+                  </div>
+                );
+              })}
+            </Fragment>
+          );
+        })}
       </div>
     );
   }
@@ -94,10 +116,6 @@ export function InsightsView() {
   const points = useMemo(() => dayPoints(logs, w.from, w.to), [logs, w.from, w.to]);
   const sum = useMemo(() => summarize(points.filter((p) => p.date <= today)), [points, today]);
   const tiles = useMemo(() => extraInsights(points.filter((p) => p.date <= today), profile), [points, profile, today]);
-  const byDate = useMemo(() => new Map(points.map((p) => [p.date, p])), [points]);
-  const series = (pick: (p: DayPoint) => number | null) => buildSeries(w, (d) => { const p = byDate.get(d); return p ? pick(p) : null; });
-  const goalFor = (g: number) => g;
-
   const pctOf = (n: number, t: number) => (t ? `${Math.round((n / t) * 100)}%` : "—");
   const days = (n: number | null, d = 0, u = "") => (n == null ? "—" : `${fmt(n, d)}${u}`);
 
@@ -132,10 +150,10 @@ export function InsightsView() {
         </Section>
       )}
 
-      <ChartCard title="Intake" subtitle="kcal per day" icon={<MetricIcon kind="intake" size={18} />} color={METRICS.intake.hex} unit="kcal" data={series((p) => p.intake)} goal={goalFor(calorieTarget(profile))} goalLabel="TDEE" />
-      <ChartCard title="Expenditure" subtitle="kcal burned per day" icon={<MetricIcon kind="expenditure" size={18} />} color={METRICS.expenditure.hex} unit="kcal" data={series((p) => p.expenditure)} goal={profile.expenditureGoal} />
-      <ChartCard title="Hydration" subtitle="litres per day" icon={<MetricIcon kind="hydration" size={18} />} color={METRICS.hydration.hex} unit="L" decimals={1} data={series((p) => p.hydration)} goal={profile.hydrationGoalL} />
-      <ChartCard title="Fasting hours" subtitle="hours fasted per day" icon={<MetricIcon kind="fast" size={18} />} color={METRICS.fast.hex} unit="h" decimals={1} data={series((p) => p.fasting)} goal={profile.fastingGoalH} />
+      <PagedChart logs={logs} gran={gran} anchor={anchor} title="Intake" subtitle="kcal per day" icon={<MetricIcon kind="intake" size={18} />} color={METRICS.intake.hex} unit="kcal" pick={pickIntake} goal={calorieTarget(profile)} goalLabel="TDEE" />
+      <PagedChart logs={logs} gran={gran} anchor={anchor} title="Expenditure" subtitle="kcal burned per day" icon={<MetricIcon kind="expenditure" size={18} />} color={METRICS.expenditure.hex} unit="kcal" pick={pickExpenditure} goal={profile.expenditureGoal} />
+      <PagedChart logs={logs} gran={gran} anchor={anchor} title="Hydration" subtitle="litres per day" icon={<MetricIcon kind="hydration" size={18} />} color={METRICS.hydration.hex} unit="L" decimals={1} pick={pickHydration} goal={profile.hydrationGoalL} />
+      <PagedChart logs={logs} gran={gran} anchor={anchor} title="Fasting hours" subtitle="hours fasted per day" icon={<MetricIcon kind="fast" size={18} />} color={METRICS.fast.hex} unit="h" decimals={1} pick={pickFasting} goal={profile.fastingGoalH} />
 
       <Section title="GYR heatmap" subtitle="Satvik · In between · Tamasik" icon={<MetricIcon kind="gyr" size={18} />} className="w-full">
         <div className="flex w-full items-center"><Heatmap kind="gyr" gran={gran} from={hw.from} to={hw.to} points={points} /></div>

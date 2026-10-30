@@ -6,6 +6,7 @@ import { BUCKET_TIMES, FoodItem, MEAL_BUCKETS, MealBucket, ParsedFood } from "@/
 import { scaleItem, todayISO } from "@/lib/dates";
 import { correctInput, ParseMode } from "@/lib/parseClient";
 import { useRecorder } from "@/lib/useRecorder";
+import { rescaleItem, useItemBase } from "@/lib/rescale";
 import { Modal } from "./ui";
 
 export interface MealBlock { bucket: MealBucket; items: FoodItem[] }
@@ -33,6 +34,7 @@ export function MealsModal({ open, mode, blocks: initial, transcript: t0, date: 
   const [transcript, setTranscript] = useState<string | undefined>();
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const { base, carry } = useItemBase();
 
   useEffect(() => {
     if (!open) return;
@@ -55,7 +57,9 @@ export function MealsModal({ open, mode, blocks: initial, transcript: t0, date: 
   });
 
   const patchBlock = (bi: number, fn: (items: FoodItem[]) => FoodItem[]) => setBlocks((bs) => bs.map((b, i) => (i === bi ? { ...b, items: fn(b.items) } : b)));
-  const patchItem = (bi: number, ii: number, p: Partial<FoodItem>) => patchBlock(bi, (xs) => xs.map((x, j) => (j === ii ? { ...x, ...p } : x)));
+  const patchItem = (bi: number, ii: number, p: Partial<FoodItem>) => patchBlock(bi, (xs) => xs.map((x, j) => (j === ii ? carry(x, { ...x, ...p }) : x)));
+  // A quantity change re-derives calories and nutrients from the row's original values, so totals update as you type.
+  const setQuantity = (bi: number, ii: number, q: string) => patchBlock(bi, (xs) => xs.map((x, j) => (j === ii ? carry(x, rescaleItem(base(x), q) ?? { ...x, quantity: q }) : x)));
   const setCalories = (bi: number, ii: number, cal: number) =>
     patchBlock(bi, (xs) => xs.map((x, j) => (j === ii ? (x.calories > 0 ? scaleItem(x, cal / x.calories) : { ...x, calories: cal }) : x)));
   const grand = blocks.reduce((s, b) => s + b.items.reduce((a, i) => a + i.calories, 0), 0);
@@ -96,7 +100,7 @@ export function MealsModal({ open, mode, blocks: initial, transcript: t0, date: 
                   {b.items.map((it, ii) => (
                     <tr key={ii} className="border-t border-line">
                       <td className="py-1.5 pr-2"><input aria-label="Item" className="input" value={it.name} onChange={(e) => patchItem(bi, ii, { name: e.target.value })} /></td>
-                      <td className="py-1.5 pr-2"><input aria-label="Quantity" className="input" value={it.quantity} onChange={(e) => patchItem(bi, ii, { quantity: e.target.value })} /></td>
+                      <td className="py-1.5 pr-2"><input aria-label="Quantity" className="input" value={it.quantity} onChange={(e) => setQuantity(bi, ii, e.target.value)} /></td>
                       <td className="w-28 py-1.5 pr-2"><input aria-label="Calories" type="number" min={0} className="input" value={it.calories} onChange={(e) => setCalories(bi, ii, Math.max(0, Number(e.target.value) || 0))} /></td>
                       <td><button aria-label="Remove item" className="p-2 text-subtle hover:text-bad" onClick={() => patchBlock(bi, (xs) => xs.filter((_, j) => j !== ii))}><Trash2 size={16} /></button></td>
                     </tr>

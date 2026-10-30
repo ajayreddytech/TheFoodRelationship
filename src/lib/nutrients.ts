@@ -19,6 +19,7 @@ export interface NutrientDef {
 export const NUTRIENTS: NutrientDef[] = [
   { key: "protein_g", label: "Protein", unit: "g", group: "Macros", macro: true, tip: "eggs, fish, legumes, paneer or lean meat" },
   { key: "carbs_g", label: "Carbohydrates", unit: "g", group: "Macros", macro: true, tip: "whole grains, fruit and starchy vegetables" },
+  { key: "sugar_g", label: "Sugar", unit: "g", group: "Macros", macro: true, limit: true },
   { key: "fiber_g", label: "Dietary Fiber", unit: "g", group: "Macros", macro: true, tip: "whole grains, vegetables, fruit and pulses" },
   { key: "fat_g", label: "Total Fat", unit: "g", group: "Fats", macro: true },
   { key: "sat_fat_g", label: "Saturated Fat", unit: "g", group: "Fats", macro: true, limit: true },
@@ -77,6 +78,9 @@ export const NUTRIENT_KEYS = NUTRIENTS.map((n) => n.key);
 export const MACRO_KEYS = NUTRIENTS.filter((n) => n.macro).map((n) => n.key);
 export const MICRO_KEYS = NUTRIENTS.filter((n) => !n.macro).map((n) => n.key);
 
+/** Limit nutrients shown in the "keep these low" drop-down. Sugar stays in its Macros group. */
+export const isUnwanted = (n: NutrientDef) => !!n.limit && n.group !== "Macros";
+
 const PROTEIN_PER_KG = { sedentary: 0.8, light: 1.0, moderate: 1.2, active: 1.4, very_active: 1.6 } as const;
 
 /**
@@ -94,6 +98,7 @@ export function rdaFor(p: Profile): Record<string, number> {
   return {
     protein_g: Math.round(Math.max(kg * PROTEIN_PER_KG[p.activity], pick(56, 46) * 0.8)),
     carbs_g: Math.round((cal * 0.5) / 4),
+    sugar_g: 50, // WHO upper guidance for free sugars
     fiber_g: Math.round((cal / 1000) * 14),
     fat_g: Math.round((cal * 0.3) / 9),
     sat_fat_g: Math.round((cal * 0.1) / 9),

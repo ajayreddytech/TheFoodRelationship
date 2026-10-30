@@ -5,10 +5,9 @@ import { Check, ChevronDown, HelpCircle, Pencil, Plus, Trash2, X } from "lucide-
 import { useContent } from "@/lib/contentStore";
 import { PageHeader, Section } from "./ui";
 import { EditableList } from "./EditableList";
-import { ModuleManager } from "./ModuleManager";
 
 export function GuideView() {
-  const { guide, faqs, addItem, editItem, removeItem, addModule, renameModule, removeModule, addFaq, editFaq, removeFaq } = useContent();
+  const { guide, faqs, addItem, editItem, removeItem, addFaq, editFaq, removeFaq } = useContent();
   const [tab, setTab] = useState<string>(guide[0]?.id ?? "faq");
   const [open, setOpen] = useState<number | null>(null);
   const [manage, setManage] = useState(false);
@@ -32,7 +31,6 @@ export function GuideView() {
         ))}
       </div>
 
-      <ModuleManager modules={guide} onAdd={(t, e) => setTab(addModule("guide", t, e))} onRename={(id, t, e) => renameModule("guide", id, t, e)} onRemove={(id) => removeModule("guide", id)} />
       {section ? (
         <Section title={section.title} subtitle={section.subtitle} icon={<span aria-hidden>{section.emoji}</span>}>
           <EditableList numbered layout="md:grid-cols-2" items={section.points} placeholder="Add a new point…"

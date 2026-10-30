@@ -6,8 +6,8 @@ import { Check, LayoutList, Plus, Trash2 } from "lucide-react";
 interface Mod { id: string; emoji: string; title: string }
 
 /** One toggle that reveals rename/delete for every module plus a "new module" row. */
-export function ModuleManager({ modules, onAdd, onRename, onRemove }: {
-  modules: Mod[]; onAdd: (title: string, emoji: string) => void; onRename: (id: string, title: string, emoji: string) => void; onRemove: (id: string) => void;
+export function ModuleManager({ modules, onAdd, onRename, onRemove, label = "Manage modules" }: {
+  modules: Mod[]; onAdd: (title: string, emoji: string) => void; onRename: (id: string, title: string, emoji: string) => void; onRemove: (id: string) => void; label?: string;
 }) {
   const [open, setOpen] = useState(false);
   const [title, setTitle] = useState("");
@@ -18,7 +18,7 @@ export function ModuleManager({ modules, onAdd, onRename, onRemove }: {
   return (
     <div>
       <button className={open ? "btn-primary !py-1.5" : "btn-ghost !py-1.5"} aria-expanded={open} onClick={() => setOpen((o) => !o)}>
-        {open ? <><Check size={14} />Done</> : <><LayoutList size={14} />Manage modules</>}
+        {open ? <><Check size={14} />Done</> : <><LayoutList size={14} />{label}</>}
       </button>
       {open && (
         <div className="mt-3 space-y-2 rounded-2xl border border-line bg-surface p-3">

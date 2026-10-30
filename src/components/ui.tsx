@@ -6,12 +6,13 @@ import { motion } from "framer-motion";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { Gran, GRANS, PeriodWindow, canGoNext, shiftAnchor, windowFor } from "@/lib/period";
 import { todayISO } from "@/lib/dates";
+import { toTitleCase } from "@/lib/text";
 
 export function PageHeader({ title, subtitle, right }: { title: string; subtitle?: string; right?: ReactNode }) {
   return (
     <header className="mb-5 flex flex-wrap items-start justify-between gap-3">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{title}</h1>
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{toTitleCase(title)}</h1>
         {subtitle && <p className="text-sm text-subtle">{subtitle}</p>}
       </div>
       {right}
@@ -27,7 +28,7 @@ export function Section({ title, subtitle, icon, right, children, className = ""
         <div className="flex items-center gap-3">
           {icon && <span className="grid h-9 w-9 place-items-center rounded-xl bg-brand/15 text-brand">{icon}</span>}
           <div>
-            <h2 className="font-semibold leading-tight">{title}</h2>
+            <h2 className="font-semibold leading-tight">{toTitleCase(title)}</h2>
             {subtitle && <p className="text-xs text-subtle">{subtitle}</p>}
           </div>
         </div>
