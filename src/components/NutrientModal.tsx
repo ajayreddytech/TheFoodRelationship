@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { ChevronDown, X } from "lucide-react";
+import { X } from "lucide-react";
 import { useStore } from "@/lib/store";
 import { nutrientStatus } from "@/lib/analytics";
 import { isUnwanted, NUTRIENTS, NutrientDef, NutrientGroup, rdaFor } from "@/lib/nutrients";
@@ -26,7 +26,6 @@ export function NutrientModal({ kind, subtitle, items, calories, onClose }: { ki
   const rda = rdaFor(profile);
   const cfg = kind ? KIND[kind] : KIND.macro;
   const [src, setSrc] = useState<NutrientDef | null>(null);
-  const [unwantedOpen, setUnwantedOpen] = useState(false);
   const unwanted = NUTRIENTS.filter((n) => isUnwanted(n) && cfg.groups.includes(n.group));
 
   const tile = (n: NutrientDef) => {
@@ -74,11 +73,8 @@ export function NutrientModal({ kind, subtitle, items, calories, onClose }: { ki
         })}
         {unwanted.length > 0 && (
           <div>
-            <button aria-expanded={unwantedOpen} className="mb-1.5 flex w-full items-center gap-2 text-xs font-semibold uppercase tracking-wide text-subtle" onClick={() => setUnwantedOpen((o) => !o)}>
-              The best keep these low
-              <ChevronDown size={14} className={`ml-auto transition ${unwantedOpen ? "rotate-180" : ""}`} />
-            </button>
-            {unwantedOpen && <div className="grid gap-2 sm:grid-cols-2">{unwanted.map(tile)}</div>}
+            <div className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-subtle">The best keep these low</div>
+            <div className="grid gap-2 sm:grid-cols-2">{unwanted.map(tile)}</div>
           </div>
         )}
       </div>
