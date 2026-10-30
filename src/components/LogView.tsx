@@ -58,7 +58,7 @@ function BigStat({ kind, label, value, unit, sub, color, note }: { kind: MetricK
   return (
     <div className="rounded-2xl border border-line bg-muted/40 p-4">
       <div className="flex items-center gap-2 text-sm text-subtle"><Icon size={16} className={text} />{toTitleCase(label)}</div>
-      <div className={`mt-1 text-4xl font-bold tabular-nums ${color ?? ""}`}>{value}<span className="ml-1 text-base font-medium text-subtle">{unit}</span>{note && <span className="ml-2 align-middle text-xs font-normal text-subtle">({note})</span>}</div>
+      <div className={`mt-1 text-4xl font-bold tabular-nums ${color ?? ""}`}>{value}<span className="ml-1 text-base font-medium text-subtle">{unit}</span>{note && <span className="mt-0.5 block text-xs font-normal text-subtle sm:ml-2 sm:mt-0 sm:inline sm:align-middle">({note})</span>}</div>
       <div className="mt-0.5 text-xs text-subtle">{sub}</div>
     </div>
   );
