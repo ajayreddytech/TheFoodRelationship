@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { useStore } from "@/lib/store";
 import { pullAll, supabase } from "@/lib/supabase";
@@ -28,6 +28,11 @@ export function AppShell() {
   const syncError = useStore((s) => s.syncError);
 
   useEffect(() => setMounted(true), []);
+
+  // Opening a section always starts at its top, not wherever the previous one was scrolled to.
+  useLayoutEffect(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: "instant" as ScrollBehavior });
+  }, [view]);
 
   useEffect(() => {
     document.documentElement.classList.toggle("dark", theme === "dark");

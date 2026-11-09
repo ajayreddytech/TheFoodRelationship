@@ -9,7 +9,7 @@ export const metadata: Metadata = {
   appleWebApp: { capable: true, title: "FoodRelation", statusBarStyle: "default" },
   formatDetection: { telephone: false },
 };
-export const viewport: Viewport = { width: "device-width", initialScale: 1, themeColor: "#10b981" };
+export const viewport: Viewport = { width: "device-width", initialScale: 1, themeColor: "#0a1410" };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
