@@ -114,6 +114,12 @@ export interface WeightLog {
   weightKg: number;
 }
 
+/** One line of the daily routine checklist. */
+export interface RoutineItem {
+  id: string;
+  text: string;
+}
+
 export interface UsersProfileRow {
   prefs?: { theme?: string; palette?: string } | null;
   user_id: string;

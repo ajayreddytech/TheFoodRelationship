@@ -1,17 +1,14 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import type { CookedBatch, DailyLog, MealBucket, MealEntry, FoodItem, Palette, Profile, Theme, UsersProfileRow, WeightLog } from "./types";
+import type { CookedBatch, DailyLog, MealBucket, MealEntry, FoodItem, Palette, Profile, RoutineItem, Theme, UsersProfileRow, WeightLog } from "./types";
 import { emptyLog, scaleItem, sumItems, todayISO, uid } from "./dates";
 import {
-  RemoteData, deleteRemoteBatch, deleteRemoteDraft, deleteRemoteLog, deleteRemoteWeight, pullBatches, pullDrafts, pullProfile, pullWeights, pushBatch, pushDraft, pushLog, pushProfile, pushWeight, syncMessage,
+  RemoteData, deleteRemoteBatch, deleteRemoteDraft, deleteRemoteLog, deleteRemoteWeight, pullBatches, pullDrafts, pullProfile, pullRoutine, pullWeights, pushBatch, pushDraft, pushLog, pushProfile, pushRoutine, pushWeight, syncMessage,
 } from "./supabase";
 
-export type View = "log" | "plan" | "calendar" | "insights" | "nutrients" | "recipes" | "guide" | "weight" | "settings" | "routine" | "goal";
+export type { RoutineItem } from "./types";
 
-export interface RoutineItem {
-  id: string;
-  text: string;
-}
+export type View = "log" | "plan" | "calendar" | "insights" | "nutrients" | "recipes" | "guide" | "weight" | "settings" | "routine" | "goal";
 
 export const DEFAULT_PROFILE: Profile = {
   dob: null,
@@ -146,6 +143,27 @@ function queueDraft(set: (p: Partial<State>) => void, get: () => State, date: st
     const log = get().logs[date];
     if (u && log) sync(set, () => pushDraftTracked(set, get, u, log));
   }, 600);
+}
+
+/** Routine edits not yet uploaded. While set, a pull must not overwrite the local list. */
+let routineEdits = 0;
+let routinePending = false;
+let routineTimer: ReturnType<typeof setTimeout> | undefined;
+
+/** Debounced upload of the whole routine list so every device shows the same checklist. */
+function queueRoutinePush(set: (p: Partial<State>) => void, get: () => State) {
+  routineEdits++;
+  routinePending = true;
+  clearTimeout(routineTimer);
+  routineTimer = setTimeout(() => {
+    const u = get().userId;
+    if (!u) { routinePending = false; return; }
+    const version = routineEdits;
+    pushRoutine(u, get().routine).then(
+      () => { if (version === routineEdits) routinePending = false; set({ syncError: null }); },
+      (e: unknown) => { set({ syncError: syncMessage(e) }); routineTimer = setTimeout(() => queueRoutinePush(set, get), 15000); },
+    );
+  }, 500);
 }
 
 const latestWeight = (w: WeightLog[]) => [...w].sort((a, b) => b.date.localeCompare(a.date))[0];
@@ -339,22 +357,32 @@ export const useStore = create<State>()(
         const t = text.trim();
         if (!t) return;
         set((s) => ({ routine: [...s.routine, { id: uid(), text: t }] }));
+        queueRoutinePush(set, get);
       },
 
       editRoutineItem: (id, text) => {
         const t = text.trim();
         if (!t) return;
         set((s) => ({ routine: s.routine.map((r) => (r.id === id ? { ...r, text: t } : r)) }));
+        queueRoutinePush(set, get);
       },
 
-      removeRoutineItem: (id) => set((s) => ({ routine: s.routine.filter((r) => r.id !== id) })),
+      removeRoutineItem: (id) => {
+        set((s) => ({ routine: s.routine.filter((r) => r.id !== id) }));
+        queueRoutinePush(set, get);
+      },
 
-      reorderRoutine: (routine) => set({ routine }),
+      reorderRoutine: (routine) => {
+        set({ routine });
+        queueRoutinePush(set, get);
+      },
 
+      // Ticks are per device and only for today: older ticks are dropped, so no history is kept.
       toggleRoutineItem: (id) => {
         const today = todayISO();
         set((s) => {
-          const checks = { ...s.routineChecks };
+          const checks: Record<string, string> = {};
+          for (const [k, v] of Object.entries(s.routineChecks)) if (v === today) checks[k] = v;
           if (checks[id] === today) delete checks[id];
           else checks[id] = today;
           return { routineChecks: checks };
@@ -402,7 +430,9 @@ export const useStore = create<State>()(
             await deleteRemoteBatch(u, id);
             set((s) => ({ deletedBatchIds: s.deletedBatchIds.filter((x) => x !== id) }));
           }
-          const [rb, rw, rp] = await Promise.all([pullBatches(u), pullWeights(u), pullProfile(u)]);
+          const [rb, rw, rp, rr] = await Promise.all([pullBatches(u), pullWeights(u), pullProfile(u), pullRoutine(u)]);
+          // Routine from another device; skipped while this device still has edits to upload.
+          if (rr && !routinePending && JSON.stringify(rr) !== JSON.stringify(get().routine)) set({ routine: rr });
           if (rp) {
             const a = applyProfileRow(get(), rp);
             if (JSON.stringify([a.profile, a.theme, a.palette]) !== JSON.stringify([get().profile, get().theme, get().palette])) set(a);
@@ -443,11 +473,14 @@ export const useStore = create<State>()(
         const mb = mergeBatches(s.batches, r.batches, s.syncedBatchIds, s.deletedBatchIds);
         const batches = mb.batches;
         const { profile, theme, palette } = applyProfileRow(s, r.profile);
-        set({ logs, weights, profile, theme, palette, batches, syncedBatchIds: mb.synced, syncedWeights: [...rw] });
+        // Remote routine wins; a routine that was never saved remotely is uploaded from this device.
+        const routine = r.routine && !routinePending ? r.routine : s.routine;
+        set({ logs, weights, profile, theme, palette, batches, routine, syncedBatchIds: mb.synced, syncedWeights: [...rw] });
         const u = s.userId;
         if (!u) return;
         sync(set, async () => {
           if (!r.profile) await pushProfile(u, profile, prefsOf(get()));
+          if (!r.routine && s.routine.length) await pushRoutine(u, s.routine);
           for (const l of Object.values(s.logs)) if (l.submitted && !remoteDates.has(l.date) && !sd.has(l.date)) await pushLog(u, l);
           for (const w of s.weights) if (!rw.has(w.date) && !sw.has(w.date)) { await pushWeight(u, w); set({ syncedWeights: addTo(get().syncedWeights, w.date) }); }
           for (const b of mb.toPush) await pushBatchTracked(set, get, u, b);

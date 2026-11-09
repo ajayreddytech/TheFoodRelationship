@@ -86,7 +86,7 @@ export function AppShell() {
       <Backdrop />
       <Dock />
       <HeaderNav />
-      <main className={`mx-auto max-w-5xl px-4 pb-28 sm:px-6 md:pb-10 md:pl-24 ${view === "log" ? "pt-4" : "pt-16"}`}>
+      <main className={`mx-auto max-w-5xl px-4 pb-28 sm:px-6 md:pb-10 md:pl-24 ${view === "log" ? "pt-4" : "pt-4 sm:pt-16"}`}>
         {syncError && (
           <div role="alert" className="mb-4 rounded-xl border border-bad/40 bg-bad/10 px-4 py-2 text-sm">
             Cloud sync issue: {syncError}. Your data is safe locally.

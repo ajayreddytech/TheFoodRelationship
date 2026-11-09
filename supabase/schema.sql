@@ -95,6 +95,9 @@ drop policy if exists "own content" on public.user_content;
 create policy "own content" on public.user_content for all
   using (auth.uid() = user_id) with check (auth.uid() = user_id);
 
+-- Daily routine checklist (ordered list of {id, text}) so it is the same on every device.
+alter table public.user_content add column if not exists routine jsonb;
+
 -- Live drafts of each day's form (submitted or not) so every device stays in sync.
 create table if not exists public.daily_drafts (
   user_id uuid references auth.users(id) on delete cascade,

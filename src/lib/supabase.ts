@@ -1,6 +1,6 @@
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
 import type {
-  CookedBatch, CookedBatchRow, DailyLog, DailyLogRow, MealEntry, MealEntryRow, Profile, UsersProfileRow, WeightLog, WeightLogRow,
+  CookedBatch, CookedBatchRow, DailyLog, DailyLogRow, MealEntry, MealEntryRow, Profile, RoutineItem, UsersProfileRow, WeightLog, WeightLogRow,
 } from "./types";
 import { dayFastingHours, dayIntake } from "./calc";
 import { logNutrients } from "./dates";
@@ -158,23 +158,42 @@ export async function pullContent(uid: string): Promise<ContentRow | null> {
   if (error) throw error;
   return (data as ContentRow | null) ?? null;
 }
+/** Uploads the whole routine checklist (order included). */
+export async function pushRoutine(uid: string, items: RoutineItem[]) {
+  if (!supabase) return;
+  const { error } = await supabase.from("user_content").upsert({ user_id: uid, routine: items, updated_at: new Date().toISOString() });
+  if (error) throw error;
+}
+
+/** Returns the saved routine, or null if this account has never saved one. */
+export async function pullRoutine(uid: string): Promise<RoutineItem[] | null> {
+  if (!supabase) return null;
+  const { data, error } = await supabase.from("user_content").select("routine").eq("user_id", uid).maybeSingle();
+  if (error) throw error;
+  const r = (data as { routine: RoutineItem[] | null } | null)?.routine;
+  return Array.isArray(r) ? r : null;
+}
+
 export interface RemoteData {
   profile: UsersProfileRow | null;
   logs: DailyLog[];
   weights: WeightLog[];
   batches: CookedBatch[];
+  routine: RoutineItem[] | null;
 }
 
 export async function pullAll(uid: string): Promise<RemoteData> {
-  if (!supabase) return { profile: null, logs: [], weights: [], batches: [] };
-  const [p, l, m, w, b] = await Promise.all([
+  if (!supabase) return { profile: null, logs: [], weights: [], batches: [], routine: null };
+  const [p, l, m, w, b, rt] = await Promise.all([
     supabase.from("users_profile").select("*").eq("user_id", uid).maybeSingle(),
     supabase.from("daily_logs").select("*").eq("user_id", uid),
     supabase.from("meal_entries").select("*").eq("user_id", uid),
     supabase.from("weight_logs").select("*").eq("user_id", uid),
     supabase.from("cooked_batches").select("*").eq("user_id", uid),
+    supabase.from("user_content").select("routine").eq("user_id", uid).maybeSingle(),
   ]);
-  for (const r of [p, l, m, w, b]) if (r.error) throw r.error;
+  for (const r of [p, l, m, w, b, rt]) if (r.error) throw r.error;
+  const routineRaw = (rt.data as { routine: RoutineItem[] | null } | null)?.routine;
   const meals = (m.data ?? []) as MealEntryRow[];
   const logs = ((l.data ?? []) as DailyLogRow[]).map<DailyLog>((r) => ({
     date: r.log_date,
@@ -190,5 +209,6 @@ export async function pullAll(uid: string): Promise<RemoteData> {
   }));
   const weights = ((w.data ?? []) as WeightLogRow[]).map((r) => ({ date: r.log_date, weightKg: Number(r.weight_kg) }));
   const batches = ((b.data ?? []) as CookedBatchRow[]).map((r) => r.data);
-  return { profile: (p.data as UsersProfileRow | null) ?? null, logs, weights, batches };
+  const routine = Array.isArray(routineRaw) ? routineRaw : null;
+  return { profile: (p.data as UsersProfileRow | null) ?? null, logs, weights, batches, routine };
 }
