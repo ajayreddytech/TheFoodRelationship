@@ -6,7 +6,12 @@ import {
   RemoteData, deleteRemoteBatch, deleteRemoteDraft, deleteRemoteLog, deleteRemoteWeight, pullBatches, pullDrafts, pullProfile, pullWeights, pushBatch, pushDraft, pushLog, pushProfile, pushWeight, syncMessage,
 } from "./supabase";
 
-export type View = "log" | "plan" | "calendar" | "insights" | "nutrients" | "recipes" | "guide" | "weight" | "settings";
+export type View = "log" | "plan" | "calendar" | "insights" | "nutrients" | "recipes" | "guide" | "weight" | "settings" | "routine" | "goal";
+
+export interface RoutineItem {
+  id: string;
+  text: string;
+}
 
 export const DEFAULT_PROFILE: Profile = {
   dob: null,
@@ -30,6 +35,12 @@ interface State {
   logs: Record<string, DailyLog>;
   weights: WeightLog[];
   batches: CookedBatch[];
+  /** Personal daily checklist (kept on this device). */
+  routine: RoutineItem[];
+  /** Routine item id -> ISO date it was ticked; an item counts as done only on that day. */
+  routineChecks: Record<string, string>;
+  /** ISO date the current target weight was set. The goal's energy progress counts from here (kept on this device). */
+  goalSince: string | null;
   /** Ids/dates known to exist on the server. A synced item that vanishes remotely was deleted on another device. */
   syncedBatchIds: string[];
   syncedDrafts: string[];
@@ -61,6 +72,11 @@ interface State {
   removeBatch: (id: string) => void;
   addWeight: (date: string, kg: number) => void;
   removeWeight: (date: string) => void;
+  addRoutineItem: (text: string) => void;
+  editRoutineItem: (id: string, text: string) => void;
+  removeRoutineItem: (id: string) => void;
+  reorderRoutine: (items: RoutineItem[]) => void;
+  toggleRoutineItem: (id: string) => void;
   setUser: (id: string | null, email: string | null) => void;
   hydrateRemote: (r: RemoteData) => void;
   /** Merges drafts from other devices (newer wins) and uploads newer local drafts. */
@@ -162,6 +178,9 @@ export const useStore = create<State>()(
       logs: {},
       weights: [],
       batches: [],
+      routine: [],
+      routineChecks: {},
+      goalSince: null,
       syncedBatchIds: [],
       syncedDrafts: [],
       syncedWeights: [],
@@ -177,7 +196,8 @@ export const useStore = create<State>()(
 
       setProfile: (patch) => {
         const profile = { ...get().profile, ...patch };
-        set({ profile });
+        const targetChanged = "targetWeightKg" in patch && patch.targetWeightKg !== get().profile.targetWeightKg;
+        set({ profile, ...(targetChanged ? { goalSince: profile.targetWeightKg != null ? todayISO() : null } : {}) });
         const u = get().userId;
         if (u) sync(set, () => pushProfile(u, profile, prefsOf(get())));
       },
@@ -315,6 +335,32 @@ export const useStore = create<State>()(
         if (u) sync(set, async () => { await deleteRemoteWeight(u, date); set((s) => ({ syncedWeights: s.syncedWeights.filter((x) => x !== date) })); });
       },
 
+      addRoutineItem: (text) => {
+        const t = text.trim();
+        if (!t) return;
+        set((s) => ({ routine: [...s.routine, { id: uid(), text: t }] }));
+      },
+
+      editRoutineItem: (id, text) => {
+        const t = text.trim();
+        if (!t) return;
+        set((s) => ({ routine: s.routine.map((r) => (r.id === id ? { ...r, text: t } : r)) }));
+      },
+
+      removeRoutineItem: (id) => set((s) => ({ routine: s.routine.filter((r) => r.id !== id) })),
+
+      reorderRoutine: (routine) => set({ routine }),
+
+      toggleRoutineItem: (id) => {
+        const today = todayISO();
+        set((s) => {
+          const checks = { ...s.routineChecks };
+          if (checks[id] === today) delete checks[id];
+          else checks[id] = today;
+          return { routineChecks: checks };
+        });
+      },
+
       setUser: (userId, userEmail) => set({ userId, userEmail }),
 
       syncDrafts: async () => {
@@ -413,13 +459,16 @@ export const useStore = create<State>()(
       name: "thefoodrelationship-v1",
       partialize: (s) => ({
         theme: s.theme, palette: s.palette, profile: s.profile, logs: s.logs, weights: s.weights, batches: s.batches,
+        routine: s.routine, routineChecks: s.routineChecks, goalSince: s.goalSince,
         syncedBatchIds: s.syncedBatchIds, syncedDrafts: s.syncedDrafts, syncedWeights: s.syncedWeights, deletedBatchIds: s.deletedBatchIds,
       }),
       // Logs saved by older versions lack newer fields.
       merge: (persisted, current) => {
         const p = (persisted ?? {}) as Partial<State>;
         const logs = Object.fromEntries(Object.entries(p.logs ?? {}).map(([d, l]) => [d, { ...emptyLog(d), ...l }]));
-        return { ...current, ...p, logs, batches: p.batches ?? [] };
+        // Goals saved before goalSince existed start counting today.
+        const goalSince = p.goalSince ?? (p.profile?.targetWeightKg != null ? todayISO() : null);
+        return { ...current, ...p, logs, batches: p.batches ?? [], goalSince };
       },
     },
   ),

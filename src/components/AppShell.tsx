@@ -16,6 +16,8 @@ import { SettingsView } from "./SettingsView";
 import { RecipesView } from "./RecipesView";
 import { GuideView } from "./GuideView";
 import { PlanView } from "./PlanView";
+import { RoutineView } from "./RoutineView";
+import { GoalView } from "./GoalView";
 import { useContent } from "@/lib/contentStore";
 
 export function AppShell() {
@@ -72,7 +74,7 @@ export function AppShell() {
 
   if (!mounted) return <div className="min-h-screen" />;
 
-  const View = { log: LogView, calendar: CalendarView, insights: InsightsView, nutrients: NutrientsView, weight: WeightView, plan: PlanView, recipes: RecipesView, guide: GuideView, settings: SettingsView }[view];
+  const View = { log: LogView, calendar: CalendarView, insights: InsightsView, nutrients: NutrientsView, weight: WeightView, plan: PlanView, recipes: RecipesView, guide: GuideView, settings: SettingsView, routine: RoutineView, goal: GoalView }[view];
 
   return (
     <div className="min-h-screen">
