@@ -46,16 +46,20 @@ const GLOBE_SHADOW = "inset -22px -26px 44px rgba(0,0,0,0.38), inset 18px 18px 3
 const fmtDay = (d: string) => new Date(d + "T00:00:00").toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
 
 /**
- * Solid disc area = kcal still to go, relative to the starting distance (the faint ring).
- * Area goes down as you close in, and grows red past the ring when you move away.
- * The disc is filled with moving water, so it keeps animating while you wait.
+ * The full green globe is the starting distance. Its green shrinks as kcal come off, and the lighter
+ * green ring around it is the part already reduced. Kcal gained past the start show as a red ring outside the green.
+ * The globe is filled with moving water, so it keeps animating while you wait.
  */
 function GoalCircle({ remaining, base, reached, wrong }: { remaining: number; base: number; reached: boolean; wrong: boolean }) {
   const reduce = useReducedMotion();
   const ref = Math.max(base, REF_MIN);
-  // Diameter is linear in kcal left, so the disc visibly shrinks as you eat/burn toward the goal and grows when you drift away.
-  const solid = reached ? MIN : Math.min(MAX, Math.max(MIN, RING * (remaining / ref)));
-  const fill = reached ? "bg-good" : wrong ? "bg-bad" : "bg-brand";
+  const k = RING / ref; // px per kcal, so the starting distance is always the full RING
+  const initial = Math.max(MIN, base * k);
+  const left = Math.max(0, remaining);
+  // Green is what is still left, capped at the starting distance: gains never shrink it, they add red outside it.
+  const green = reached ? MIN : Math.min(initial, Math.max(MIN, left * k));
+  // Red is the kcal gained past the start. It sits behind the green, so only the extra part shows.
+  const red = wrong && !reached ? Math.min(MAX, Math.max(initial, left * k)) : 0;
 
   return (
     <div className="mx-auto grid place-items-center" style={{ width: CANVAS, height: CANVAS, maxWidth: "100%" }} role="img" aria-label={`${reached ? "Goal reached" : wrong ? "Moving away from goal" : "Distance to goal"}`}>
@@ -63,22 +67,25 @@ function GoalCircle({ remaining, base, reached, wrong }: { remaining: number; ba
       <motion.div
         aria-hidden
         className="col-start-1 row-start-1 rounded-full border-2 border-dashed border-line"
-        animate={{ width: RING, height: RING, rotate: 360 }}
+        animate={{ width: initial, height: initial, rotate: 360 }}
         transition={{ width: SPRING, height: SPRING, rotate: { duration: 36, repeat: Infinity, ease: "linear" } }}
       />
-      {/* Covered part: the faint disc that shows the progress already made. */}
-      <motion.div aria-hidden className="col-start-1 row-start-1 rounded-full bg-brand/10" animate={{ width: RING, height: RING }} transition={SPRING} />
-      {/* Still to go: a water globe that bobs and tilts in 3D. */}
+      {/* Reduced part: the lighter green shade between the starting distance and what is left. */}
+      <motion.div aria-hidden className="col-start-1 row-start-1 rounded-full bg-good/20" animate={{ width: initial, height: initial }} transition={SPRING} />
+      {/* Still to go: a water globe that bobs and tilts in 3D. The red gained part sits behind the green. */}
       <motion.div
-        className="col-start-1 row-start-1"
+        className="col-start-1 row-start-1 grid place-items-center"
         style={{ transformPerspective: 700 }}
         animate={reduce ? undefined : { y: [0, -8, 0], rotateX: [0, 7, 0, -7, 0], rotateY: [0, -9, 0, 9, 0] }}
         transition={{ duration: 6, repeat: Infinity, ease: "easeInOut" }}
       >
+      {red > 0 && (
+        <motion.div aria-hidden className="col-start-1 row-start-1 rounded-full bg-bad" style={{ boxShadow: GLOBE_SHADOW }} animate={{ width: red, height: red }} transition={SPRING} />
+      )}
       <motion.div
-        className={`relative overflow-hidden rounded-full ${fill}`}
+        className="relative col-start-1 row-start-1 overflow-hidden rounded-full bg-good"
         style={{ boxShadow: GLOBE_SHADOW }}
-        animate={{ width: solid, height: solid }}
+        animate={{ width: green, height: green }}
         transition={SPRING}
       >
         <svg aria-hidden viewBox="0 0 200 200" preserveAspectRatio="none" className="absolute inset-0 h-full w-full">
@@ -127,9 +134,7 @@ function GoalCircle({ remaining, base, reached, wrong }: { remaining: number; ba
           transition={{ duration: 3.8, repeat: Infinity, repeatDelay: 2, ease: "easeInOut" }}
         />
 
-        {(reached || wrong) && (
-          <span aria-hidden className={`absolute inset-0 animate-ping rounded-full ${reached ? "bg-good/40" : "border-2 border-bad"}`} />
-        )}
+        {reached && <span aria-hidden className="absolute inset-0 animate-ping rounded-full bg-good/40" />}
       </motion.div>
       </motion.div>
     </div>
@@ -139,19 +144,22 @@ function GoalCircle({ remaining, base, reached, wrong }: { remaining: number; ba
 function DayRow({ d, remainingLabel }: { d: GoalDay; remainingLabel: string }) {
   const good = d.effect > 0;
   const away = d.effect < 0;
+  // Burned more than eaten: green, up arrow. Ate more than burned: red, down arrow.
   const burned = d.net < 0;
-  const Icon = burned ? TrendingDown : d.net > 0 ? TrendingUp : Minus;
-  const tone = good ? "text-good" : away ? "text-bad" : "text-subtle";
+  const added = d.net > 0;
+  const Icon = burned ? TrendingUp : added ? TrendingDown : Minus;
+  const tone = burned ? "text-good" : added ? "text-bad" : "text-subtle";
   const badge = good ? "bg-good/15 text-good" : away ? "bg-bad/15 text-bad" : "bg-muted text-subtle";
   const verdict = good ? "Good" : away ? "Bad" : "Neutral";
-  const label = burned ? "Burned" : d.net > 0 ? "Added" : "Even";
+  const amount = fmt(Math.round(Math.abs(d.net)));
+  const text = burned ? `Burned ${amount} kcal` : added ? `Added ${amount} kcal of fat` : `Even ${amount} kcal`;
 
   return (
     <motion.li initial={{ opacity: 0, x: -6 }} animate={{ opacity: 1, x: 0 }} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2.5 text-sm">
       <span className="w-28 shrink-0 font-medium">{fmtDay(d.date)}</span>
       <span className={`flex items-center gap-1.5 font-semibold tabular-nums ${tone}`}>
         <Icon size={16} />
-        {label} {fmt(Math.round(Math.abs(d.net)))} kcal
+        {text}
       </span>
       <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${badge}`}>{verdict}</span>
       <span className="ml-auto text-xs tabular-nums text-subtle">{remainingLabel}</span>
@@ -259,7 +267,7 @@ export function GoalView() {
           </button>
         }
       >
-        <GoalCircle remaining={Math.max(0, snap.remainingKcal)} base={snap.baseKcal} reached={snap.reached} wrong={snap.wrong} />
+        <GoalCircle remaining={snap.remainingKcal} base={snap.baseKcal} reached={snap.reached} wrong={snap.wrong} />
 
         <div className="mt-5 text-center">
           <p className={`text-sm font-semibold uppercase tracking-wide ${tone}`}>{headline}</p>
@@ -295,9 +303,9 @@ export function GoalView() {
         </div>
 
         <div className="mt-4 flex flex-wrap justify-center gap-3 text-xs text-subtle">
-          <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-brand" />Still to go</span>
-          <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-brand/20" />Covered</span>
-          <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-bad" />Moving away</span>
+          <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-good" />Still to go</span>
+          <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-good/20" />Reduced</span>
+          <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-bad" />Gained</span>
           <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-good" />Reached</span>
         </div>
       </Section>
