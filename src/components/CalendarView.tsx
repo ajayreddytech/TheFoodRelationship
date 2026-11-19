@@ -148,7 +148,7 @@ export function CalendarView() {
               ].map((r) => (
                 <div key={r.k} className="flex items-center gap-2 rounded-xl bg-muted/50 p-2 text-sm"><MetricIcon kind={r.k} size={18} /><span>{r.v}</span></div>
               ))}
-              <div className="flex items-center gap-2 rounded-xl bg-muted/50 p-2 text-sm"><NibbleMark nibbled={selLog.nibbles} size={18} /><span>{selLog.nibbles == null ? "—" : selLog.nibbles ? "Nibbles" : "No nibbles"}</span></div>
+              <div className="flex items-center gap-2 rounded-xl bg-muted/50 p-2 text-sm"><NibbleMark nibbled={selLog.nibbles} size={18} /><span>{selLog.nibbles == null ? "—" : selLog.nibbles ? "Nibbles" : "No Nibbles"}</span></div>
             </div>
           )}
           <div className="flex flex-col gap-2 sm:flex-row">

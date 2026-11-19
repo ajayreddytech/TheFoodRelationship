@@ -40,7 +40,7 @@ function Heatmap({ kind, gran, from, to, points }: { kind: "gyr" | "nibbles"; gr
   };
   const title = (c: Cell) => {
     const p = c.point;
-    const v = !p?.logged ? "no data" : kind === "gyr" ? (p.gyr ? GYR_STYLE[p.gyr].hint : "not set") : p.nibbles == null ? "not set" : p.nibbles ? "Had nibbles" : "No nibbles";
+    const v = !p?.logged ? "no data" : kind === "gyr" ? (p.gyr ? GYR_STYLE[p.gyr].hint : "not set") : p.nibbles == null ? "not set" : p.nibbles ? "Had nibbles" : "No Nibbles";
     return `${c.date}: ${v}`;
   };
 
@@ -158,7 +158,7 @@ export function InsightsView() {
       <Section title="GYR heatmap" subtitle="Satvik · In between · Tamasik" icon={<MetricIcon kind="gyr" size={18} />} className="w-full">
         <div className="flex w-full items-center"><Heatmap kind="gyr" gran={gran} from={hw.from} to={hw.to} points={points} /></div>
       </Section>
-      <Section title="Nibbles heatmap" subtitle="Green check = no nibbles · Red cross = nibbles" icon={<MetricIcon kind="nibbles" size={18} />} className="w-full">
+      <Section title="Nibbles heatmap" subtitle="Green check = No Nibbles · Red cross = nibbles" icon={<MetricIcon kind="nibbles" size={18} />} className="w-full">
         <div className="flex w-full items-center"><Heatmap kind="nibbles" gran={gran} from={hw.from} to={hw.to} points={points} /></div>
       </Section>
     </div>

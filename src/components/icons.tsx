@@ -21,7 +21,7 @@ export const METRICS: Record<MetricKind, { Icon: typeof Utensils; text: string; 
   expenditure: { Icon: Dumbbell, text: "text-orange-500", bg: "bg-orange-500/15", hex: "#f97316", label: "Expenditure" },
   hydration: { Icon: Droplet, text: "text-sky-500", bg: "bg-sky-500/15", hex: "#0ea5e9", label: "Hydration" },
   gyr: { Icon: Salad, text: "text-lime-500", bg: "bg-lime-500/15", hex: "#84cc16", label: "GYR" },
-  nibbles: { Icon: Hand, text: "text-amber-600", bg: "bg-amber-500/15", hex: "#d97706", label: "No nibbles" },
+  nibbles: { Icon: Hand, text: "text-amber-600", bg: "bg-amber-500/15", hex: "#d97706", label: "No Nibbles" },
   fast: { Icon: Sparkles, text: "text-violet-500", bg: "bg-violet-500/15", hex: "#8b5cf6", label: "Fasting" },
 };
 

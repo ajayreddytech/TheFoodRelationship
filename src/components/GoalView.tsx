@@ -8,7 +8,7 @@ import { useStore } from "@/lib/store";
 import { KCAL_PER_KG, kgToLb, lbToKg, round } from "@/lib/calc";
 import { todayISO } from "@/lib/dates";
 import { GoalDay, computeGoal } from "@/lib/goal";
-import { Empty, PageHeader, Section, fmt } from "./ui";
+import { Empty, PageHeader, ProgressBar, Section, fmt } from "./ui";
 
 const CANVAS = 320; // square the circle lives in, so it fits a 360px phone
 const RING = 200; // diameter of the full distance (the starting point)
@@ -53,7 +53,8 @@ const fmtDay = (d: string) => new Date(d + "T00:00:00").toLocaleDateString(undef
 function GoalCircle({ remaining, base, reached, wrong }: { remaining: number; base: number; reached: boolean; wrong: boolean }) {
   const reduce = useReducedMotion();
   const ref = Math.max(base, REF_MIN);
-  const solid = reached ? MIN : Math.min(MAX, Math.max(MIN, RING * Math.sqrt(remaining / ref)));
+  // Diameter is linear in kcal left, so the disc visibly shrinks as you eat/burn toward the goal and grows when you drift away.
+  const solid = reached ? MIN : Math.min(MAX, Math.max(MIN, RING * (remaining / ref)));
   const fill = reached ? "bg-good" : wrong ? "bg-bad" : "bg-brand";
 
   return (
@@ -135,7 +136,7 @@ function GoalCircle({ remaining, base, reached, wrong }: { remaining: number; ba
   );
 }
 
-function DayRow({ d, remainingLabel, live }: { d: GoalDay; remainingLabel: string; live: boolean }) {
+function DayRow({ d, remainingLabel }: { d: GoalDay; remainingLabel: string }) {
   const good = d.effect > 0;
   const away = d.effect < 0;
   const burned = d.net < 0;
@@ -153,7 +154,6 @@ function DayRow({ d, remainingLabel, live }: { d: GoalDay; remainingLabel: strin
         {label} {fmt(Math.round(Math.abs(d.net)))} kcal
       </span>
       <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${badge}`}>{verdict}</span>
-      {live && <span className="rounded-full bg-brand/15 px-2 py-0.5 text-xs font-semibold text-brand">Today, live</span>}
       <span className="ml-auto text-xs tabular-nums text-subtle">{remainingLabel}</span>
     </motion.li>
   );
@@ -269,6 +269,23 @@ export function GoalView() {
           <p className="mt-1 text-sm text-subtle tabular-nums">
             {fmt(Math.round(Math.abs(snap.remainingKcal)))} kcal {snap.reached ? (snap.remainingKcal < 0 ? "past the line" : "on target") : "to go"}
           </p>
+          <div className="mx-auto mt-4 max-w-xs">
+            <ProgressBar value={Math.max(0, snap.progressKcal)} max={snap.baseKcal} color={snap.wrong ? "bg-bad" : "bg-good"} />
+            <p className="mt-1.5 text-xs tabular-nums text-subtle">
+              {snap.baseKcal > 0 ? `${Math.round(Math.min(100, Math.max(0, (snap.progressKcal / snap.baseKcal) * 100)))}% of the way there` : "At target"}
+            </p>
+          </div>
+          <p className="mt-3 text-sm">
+            {snap.progressKcal === 0 ? (
+              <span className="text-subtle">No fat change counted yet</span>
+            ) : snap.mode === "gain" ? (
+              <>{snap.progressKcal > 0 ? "Fat gained" : "Fat lost"} ≈ <b className="tabular-nums">{fmt(Math.abs(snap.progressKcal) / KCAL_PER_KG, 2)} kg</b></>
+            ) : snap.progressKcal > 0 ? (
+              <>Fat burned ≈ <b className="tabular-nums text-good">{fmt(snap.progressKcal / KCAL_PER_KG, 2)} kg</b></>
+            ) : (
+              <>Fat added ≈ <b className="tabular-nums text-bad">{fmt(-snap.progressKcal / KCAL_PER_KG, 2)} kg</b></>
+            )}
+          </p>
           <p className="mt-3 text-sm">
             Weight gap: <b className="tabular-nums">{fmt(conv(gapKg), 1)} {unit}</b> {gapWord}
           </p>
@@ -302,14 +319,13 @@ export function GoalView() {
 
       <Section title="Daily log" subtitle={snap.days.length ? `${snap.days.length} day${snap.days.length === 1 ? "" : "s"} counted` : "No days counted yet"} icon={<TrendingDown size={18} />}>
         {snap.days.length === 0 ? (
-          <Empty>No days counted since {fmtDay(snap.countingFrom)} yet. Log a meal on the Log page and today appears here as you go.</Empty>
+          <Empty>No finished days counted since {fmtDay(snap.countingFrom)} yet. Today is counted once it's over.</Empty>
         ) : (
           <ul className="divide-y divide-line">
             {[...snap.days].reverse().map((d) => (
               <DayRow
                 key={d.date}
                 d={d}
-                live={d.date === today}
                 remainingLabel={d.remainingAfter <= 0 ? "Reached" : `${fmt(Math.round(d.remainingAfter))} kcal left`}
               />
             ))}

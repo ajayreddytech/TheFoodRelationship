@@ -164,10 +164,6 @@ export function LogView() {
             <div className="rounded-2xl bg-muted/50 p-2 text-center"><div className="text-xs text-subtle">Eating window</div><div className="text-2xl font-bold tabular-nums">{eating != null ? `${eating.toFixed(1)}h` : "—"}</div></div>
             <div className="rounded-2xl bg-muted/50 p-2 text-center"><div className="flex items-center justify-center gap-1 text-xs text-subtle"><Sparkles size={12} className="text-violet-500" />Fasting</div><div className="text-2xl font-bold tabular-nums">{fastH != null ? `${fastH.toFixed(1)}h` : "—"}</div></div>
           </div>
-          <button className={`btn-ghost mt-3 w-full flex-wrap !py-2 ${log.fasted ? "!border-violet-500 !bg-violet-500/15 !text-violet-500" : ""}`} onClick={() => s.setFastingDay(date, !log.fasted)}>
-            <Sparkles size={16} className="text-violet-500" />{log.fasted ? "Fasting day ✓ (tap to undo)" : <>Fasting day <span className="text-xs font-normal text-subtle">(click this only if you&apos;re fasting the whole day)</span></>}
-          </button>
-          {log.fasted && <p className="mt-2 text-xs text-subtle">Full fast saved: 0 kcal, 24h, Green, no nibbles. Add expenditure and hydration, then submit again.</p>}
         </Section>
 
         <Section title="Today's meal plan" subtitle={planItems.length ? `${fmt(planCal)} kcal planned` : "Nothing planned"} icon={<CalendarCheck size={18} />}>
@@ -217,8 +213,7 @@ export function LogView() {
               <span className="min-w-[4rem] text-center text-xl font-bold tabular-nums">{log.hydrationL.toFixed(1)} L</span>
               <button aria-label="More water" className="btn-ghost !px-3" onClick={() => s.patchLog(date, { hydrationL: +(log.hydrationL + 0.5).toFixed(1) })}><Plus size={16} /></button>
             </InputRow>
-            <InputRow kind="fast" label="Fast"><span className="text-2xl font-bold tabular-nums">{fastH != null ? fastH.toFixed(1) : "—"}</span><span className="text-sm text-subtle">hours</span></InputRow>
-            <InputRow kind="nibbles" label="No nibbles">
+            <InputRow kind="nibbles" label="No Nibbles">
               {([false, true] as const).map((nibbled) => (
                 <button key={String(nibbled)} aria-pressed={log.nibbles === nibbled} onClick={() => s.patchLog(date, { nibbles: log.nibbles === nibbled ? null : nibbled })}
                   className={`flex items-center gap-1 rounded-xl border-2 px-5 py-2 text-sm font-semibold ${log.nibbles === nibbled ? (nibbled ? "border-transparent bg-bad text-white" : "border-transparent bg-good text-white") : "border-line"}`}>

@@ -1,5 +1,6 @@
 import { DEFAULT_CALORIE_TARGET, KCAL_PER_KG, calcTDEE, dayIntake } from "./calc";
 import type { DailyLog, Profile, WeightLog } from "./types";
+import { addDays } from "./dates";
 
 export interface GoalDay {
   date: string;
@@ -60,9 +61,12 @@ export function computeGoal(
   const mode = Math.abs(gapKcal) < 1 ? "hold" : gapKcal < 0 ? "lose" : "gain";
   const baseKcal = Math.abs(gapKcal);
 
-  // Past days count once submitted. Today counts as you log it, so the circle moves live.
+  // Counting restarts at the anchor (goal start or latest weigh-in) and begins the day before it, so the
+  // day before a goal or weigh-in is included. Only finished days count: today is still being filled in.
+  const anchor = lastWeighIn > since ? lastWeighIn : since;
+  const countFrom = addDays(anchor, -1);
   const counted = Object.values(logs)
-    .filter((l) => (l.submitted || l.date === today) && l.date >= since && l.date > lastWeighIn && l.date <= today)
+    .filter((l) => l.date >= countFrom && l.date < today && (l.submitted || dayIntake(l) > 0 || (l.expenditure || 0) > 0))
     .sort((a, b) => a.date.localeCompare(b.date));
 
   let progress = 0;
@@ -85,7 +89,7 @@ export function computeGoal(
     remainingKcal,
     reached: remainingKcal <= 0,
     wrong: progress < 0,
-    countingFrom: lastWeighIn > since ? lastWeighIn : since,
+    countingFrom: countFrom,
     lastWeighIn: lastWeighIn || null,
     days,
   };
