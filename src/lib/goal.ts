@@ -34,6 +34,8 @@ export interface GoalSnapshot {
   lastWeighIn: string | null;
   /** Counted days, oldest first. */
   days: GoalDay[];
+  /** Today, shown live in the daily log. Not part of progress until the day is over. */
+  liveDay: GoalDay | null;
 }
 
 /**
@@ -69,16 +71,31 @@ export function computeGoal(
     .filter((l) => l.date >= countFrom && l.date < today && (l.submitted || dayIntake(l) > 0 || (l.expenditure || 0) > 0))
     .sort((a, b) => a.date.localeCompare(b.date));
 
+  // Losing: a deficit helps. Gaining: a surplus helps. Holding: any drift hurts.
+  const effectOf = (l: DailyLog) => {
+    const net = dayIntake(l) - (tdee + (l.expenditure || 0));
+    const effect = mode === "lose" ? -net : mode === "gain" ? net : -Math.abs(net);
+    return { net, effect };
+  };
+
   let progress = 0;
   const days: GoalDay[] = counted.map((l) => {
-    const net = dayIntake(l) - (tdee + (l.expenditure || 0));
-    // Losing: a deficit helps. Gaining: a surplus helps. Holding: any drift hurts.
-    const effect = mode === "lose" ? -net : mode === "gain" ? net : -Math.abs(net);
+    const { net, effect } = effectOf(l);
     progress += effect;
     return { date: l.date, net, effect, remainingAfter: baseKcal - progress };
   });
 
+  // Today is shown live in the daily log but is not counted in the bubble until it is over.
+  const todayLog = logs[today];
+  let liveDay: GoalDay | null = null;
+  if (todayLog && (todayLog.submitted || dayIntake(todayLog) > 0 || (todayLog.expenditure || 0) > 0)) {
+    const { net, effect } = effectOf(todayLog);
+    liveDay = { date: today, net, effect, remainingAfter: baseKcal - progress - effect };
+  }
+
   const remainingKcal = baseKcal - progress;
+  // Reached means the weigh-in has hit the goal weight, as you described it.
+  const weighReached = mode === "lose" ? current <= target : mode === "gain" ? current >= target : true;
   return {
     target,
     current,
@@ -87,10 +104,11 @@ export function computeGoal(
     baseKcal,
     progressKcal: progress,
     remainingKcal,
-    reached: remainingKcal <= 0,
+    reached: weighReached,
     wrong: progress < 0,
     countingFrom: countFrom,
     lastWeighIn: lastWeighIn || null,
     days,
+    liveDay,
   };
 }

@@ -231,7 +231,10 @@ export const useStore = create<State>()(
         set((s) => {
           const cur = s.logs[date] ?? emptyLog(date);
           const entry: MealEntry = { id: uid(), bucket, items };
-          return { logs: { ...s.logs, [date]: { ...cur, meals: [...cur.meals, entry], submitted: false, updatedAt: now() } } };
+          // First meal of today with no clock-in yet: clock in 45 minutes before it was logged.
+          const autoClockIn = cur.meals.length === 0 && !cur.firstMealAt && !cur.fasted && date === todayISO();
+          const firstMealAt = autoClockIn ? new Date(Date.now() - 45 * 60_000).toISOString() : cur.firstMealAt;
+          return { logs: { ...s.logs, [date]: { ...cur, meals: [...cur.meals, entry], firstMealAt, submitted: false, updatedAt: now() } } };
         });
         queueDraft(set, get, date);
       },

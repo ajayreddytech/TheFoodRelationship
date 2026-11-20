@@ -205,7 +205,13 @@ export function LogView() {
           <div className="space-y-3">
             <InputRow kind="intake" label="Intake"><span className="text-2xl font-bold tabular-nums">{fmt(intake)}</span><span className="text-sm text-subtle">kcal</span></InputRow>
             <InputRow kind="expenditure" label="Expenditure">
-              <input aria-label="Expenditure kcal" type="number" min={0} className="input !w-28 text-right" value={log.expenditure || ""} placeholder="0" onChange={(e) => s.patchLog(date, { expenditure: Math.max(0, Number(e.target.value) || 0) })} />
+              <input aria-label="Expenditure kcal" type="number" min={0} className="input !w-20 text-right" value={log.expenditure || ""} placeholder="0" onChange={(e) => s.patchLog(date, { expenditure: Math.max(0, Number(e.target.value) || 0) })} />
+              <div className="flex flex-col gap-1">
+                {[240, 400].map((v) => (
+                  <button key={v} type="button" aria-label={`Set expenditure to ${v} kcal`} className="rounded-md border border-line bg-surface px-2 py-0.5 text-xs font-semibold tabular-nums hover:border-brand hover:text-brand"
+                    onClick={() => s.patchLog(date, { expenditure: v })}>{v}</button>
+                ))}
+              </div>
               <span className="text-sm text-subtle">kcal</span>
             </InputRow>
             <InputRow kind="hydration" label="Hydration">

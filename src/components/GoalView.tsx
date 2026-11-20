@@ -141,7 +141,7 @@ function GoalCircle({ remaining, base, reached, wrong }: { remaining: number; ba
   );
 }
 
-function DayRow({ d, remainingLabel }: { d: GoalDay; remainingLabel: string }) {
+function DayRow({ d, remainingLabel, live }: { d: GoalDay; remainingLabel: string; live?: boolean }) {
   const good = d.effect > 0;
   const away = d.effect < 0;
   // Burned more than eaten: green, up arrow. Ate more than burned: red, down arrow.
@@ -156,7 +156,7 @@ function DayRow({ d, remainingLabel }: { d: GoalDay; remainingLabel: string }) {
 
   return (
     <motion.li initial={{ opacity: 0, x: -6 }} animate={{ opacity: 1, x: 0 }} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2.5 text-sm">
-      <span className="w-28 shrink-0 font-medium">{fmtDay(d.date)}</span>
+      <span className="w-28 shrink-0 font-medium">{live ? "Today" : fmtDay(d.date)}{live && <span className="ml-1.5 rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-semibold uppercase text-subtle">Live</span>}</span>
       <span className={`flex items-center gap-1.5 font-semibold tabular-nums ${tone}`}>
         <Icon size={16} />
         {text}
@@ -247,10 +247,30 @@ export function GoalView() {
     );
   }
 
-  const toGoKg = Math.abs(snap.remainingKcal) / KCAL_PER_KG;
+  if (snap.reached) {
+    return (
+      <div className="space-y-5 pb-10">
+        <PageHeader title="Goal" subtitle="You did it" />
+        <Section title="Goal reached" subtitle={`${fmt(conv(snap.current), 1)} ${unit} — your target was ${fmt(conv(snap.target), 1)} ${unit}`} icon={<Trophy size={18} />}>
+          <div className="flex items-start gap-3 rounded-2xl border border-good/40 bg-good/10 p-4">
+            <Trophy size={20} className="mt-0.5 shrink-0 text-good" />
+            <div className="text-sm">
+              <p className="font-semibold">Congratulations, you reached {fmt(conv(snap.target), 1)} {unit}!</p>
+              <p className="text-subtle">That took consistency, and it's yours to keep. Ready for the next one? Start a new goal below and the circle and daily log begin fresh from today.</p>
+            </div>
+          </div>
+        </Section>
+        <Section title="Start a new goal" subtitle="Enter your current and goal weight" icon={<RotateCcw size={18} />}>
+          <GoalSetup imperial={imperial} unit={unit} startValue={startValue} submitLabel="Start new goal" />
+        </Section>
+      </div>
+    );
+  }
+
+  const toGoKg = Math.max(0, snap.remainingKcal) / KCAL_PER_KG;
   const gapKg = Math.abs(snap.target - snap.current);
-  const headline = snap.reached ? (snap.remainingKcal < 0 ? "Past goal" : "Goal reached") : snap.wrong ? "Moving away" : "To go";
-  const tone = snap.reached ? "text-good" : snap.wrong ? "text-bad" : "text-brand";
+  const headline = snap.wrong ? "Moving away" : "To go";
+  const tone = snap.wrong ? "text-bad" : "text-brand";
   const gapWord = snap.mode === "lose" ? "to lose" : snap.mode === "gain" ? "to gain" : "— at target";
 
   return (
@@ -275,7 +295,7 @@ export function GoalView() {
             {fmt(conv(toGoKg), 1)} <span className="text-lg font-semibold text-subtle">{unit}</span>
           </motion.p>
           <p className="mt-1 text-sm text-subtle tabular-nums">
-            {fmt(Math.round(Math.abs(snap.remainingKcal)))} kcal {snap.reached ? (snap.remainingKcal < 0 ? "past the line" : "on target") : "to go"}
+            {fmt(Math.round(Math.max(0, snap.remainingKcal)))} kcal to go
           </p>
           <div className="mx-auto mt-4 max-w-xs">
             <ProgressBar value={Math.max(0, snap.progressKcal)} max={snap.baseKcal} color={snap.wrong ? "bg-bad" : "bg-good"} />
@@ -310,26 +330,19 @@ export function GoalView() {
         </div>
       </Section>
 
-      {snap.reached && (
-        <>
-          <div className="flex items-start gap-3 rounded-2xl border border-good/40 bg-good/10 p-4">
-            <Trophy size={20} className="mt-0.5 shrink-0 text-good" />
-            <div className="text-sm">
-              <p className="font-semibold">You reached {fmt(conv(snap.target), 1)} {unit}.</p>
-              <p className="text-subtle">Enter a new current and goal weight below to start again. The count resets from today.</p>
-            </div>
-          </div>
-          <Section title="Start a new goal" subtitle="Resets the circle and the energy count" icon={<RotateCcw size={18} />}>
-            <GoalSetup imperial={imperial} unit={unit} startValue={startValue} submitLabel="Start new goal" />
-          </Section>
-        </>
-      )}
-
       <Section title="Daily log" subtitle={snap.days.length ? `${snap.days.length} day${snap.days.length === 1 ? "" : "s"} counted` : "No days counted yet"} icon={<TrendingDown size={18} />}>
-        {snap.days.length === 0 ? (
+        {snap.days.length === 0 && !snap.liveDay ? (
           <Empty>No finished days counted since {fmtDay(snap.countingFrom)} yet. Today is counted once it's over.</Empty>
         ) : (
           <ul className="divide-y divide-line">
+            {snap.liveDay && (
+              <DayRow
+                key="live"
+                d={snap.liveDay}
+                live
+                remainingLabel={snap.liveDay.remainingAfter <= 0 ? "Reached" : `${fmt(Math.round(snap.liveDay.remainingAfter))} kcal left`}
+              />
+            )}
             {[...snap.days].reverse().map((d) => (
               <DayRow
                 key={d.date}
