@@ -145,7 +145,7 @@ export async function POST(req: Request) {
             method: "POST",
             headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
             body: payload,
-            signal: AbortSignal.timeout(8000),
+            signal: AbortSignal.timeout(40000),
           });
         } catch {
           res = null;
