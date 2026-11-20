@@ -131,8 +131,9 @@ export async function POST(req: Request) {
   });
 
   // Free-tier, fast models first; fall back if one is retired (404) or overloaded.
-  const primary = process.env.GEMINI_MODEL || "gemini-3.5-flash-lite";
-  const models = [primary, ...(process.env.GEMINI_FALLBACK_MODELS ?? "gemini-3.5-flash,gemini-3.1-flash-lite").split(",").map((s) => s.trim()).filter(Boolean)]
+  // gemini-3.1-flash-lite is the fastest reliable model in testing; gemini-3.5-flash-lite is a separate quota for when it is busy.
+  const primary = process.env.GEMINI_MODEL || "gemini-3.1-flash-lite";
+  const models = [primary, ...(process.env.GEMINI_FALLBACK_MODELS ?? "gemini-3.5-flash-lite").split(",").map((s) => s.trim()).filter(Boolean)]
     .filter((m, i, a) => a.indexOf(m) === i);
 
   const ask = async (): Promise<Response | null> => {
@@ -144,7 +145,7 @@ export async function POST(req: Request) {
             method: "POST",
             headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
             body: payload,
-            signal: AbortSignal.timeout(15000),
+            signal: AbortSignal.timeout(8000),
           });
         } catch {
           res = null;

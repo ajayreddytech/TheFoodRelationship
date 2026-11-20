@@ -61,7 +61,7 @@ export interface CorrectionResult extends CorrectionContext { transcript?: strin
 /** Reads a route reply. A non-JSON body (e.g. a gateway error page) becomes a readable message instead of a parse crash. */
 async function readReply(res: Response): Promise<any> {
   const data = await res.json().catch(() => null);
-  if (!data) throw new Error(res.ok ? "The AI response was unreadable. Please try again." : "The server couldn't process that. Please try again.");
+  if (!data) throw new Error(res.ok ? "The AI response was unreadable. Please try again." : `The server couldn't process that (HTTP ${res.status}). Please try again.`);
   if (!res.ok) throw new Error(data.error ?? "Could not parse that.");
   return data;
 }
