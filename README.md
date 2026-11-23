@@ -50,7 +50,7 @@ It also connects food to how you feel. Fasting windows, hydration, a daily mood 
 
 ## Built with
 
-Next.js 14 and TypeScript, Tailwind CSS, Zustand, Supabase (Postgres, Google auth, RLS), Google Gemini with an optional backup AI provider.
+Next.js 14 and TypeScript, Tailwind CSS, Zustand, Supabase (Postgres, Google auth, RLS), Google Gemini with OpenAI as backup.
 
 ## Getting started
 
@@ -68,9 +68,9 @@ npm run dev                  # http://localhost:3000
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase anon key |
 | `GEMINI_API_KEY` | Google AI Studio key (server-side only) |
 | `GEMINI_MODEL` | Primary Gemini model |
-| `GEMINI_FALLBACK_MODELS` | Comma-separated Gemini fallbacks |
-| `GROQ_API_KEY` | Optional backup AI key (server-side only) |
-| `GROQ_MODELS` | Optional, comma-separated backup models, tried in order |
+| `OPENAI_API_KEY` | Backup AI key, used when Gemini fails twice (server-side only) |
+| `OPENAI_MODEL` | Optional backup chat model (default `gpt-6-luna`) |
+| `OPENAI_TRANSCRIBE_MODEL` | Optional voice transcription model (default `gpt-transcribe`) |
 
 Without Supabase, the app runs as a guest and stores data in the browser.
 
