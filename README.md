@@ -4,7 +4,7 @@
 
 # TheFoodRelationship
 
-**A fast, offline-friendly wellness tracker for calories, nutrients, hydration, weight and intermittent fasting, with AI meal parsing from voice or plain text.**
+**Log what you eat by speaking it. See how food, fasting, hydration and weight affect how you feel.**
 
 [Live demo](http://thefoodrelationship.netlify.app/) · [Report a bug](https://github.com/ajayreddytech/TheFoodRelationship/issues)
 
@@ -12,55 +12,45 @@
 
 </div>
 
-## Why this exists
+## The problem
 
-Most food trackers make logging tedious: search a database, pick a serving, repeat for every ingredient. TheFoodRelationship lets you say *"For dinner I had 200g grilled chicken and a cup of quinoa"* and turns it into structured calories, macros and micros, which you confirm before anything is saved. It also treats fasting windows, hydration, mood-of-the-day (Green/Yellow/Red) and weight as first-class data, so you can see the whole picture in one place.
+Food tracking fails because it is tedious. Searching a database, picking servings and logging every ingredient is why most people quit within weeks.
+
+## The solution
+
+Say it, and it is logged. *"Dinner was 200g grilled chicken and a cup of quinoa"* becomes calories, macros and micronutrients. You confirm the result before anything is saved.
+
+It also connects food to how you feel. Fasting windows, hydration, a daily mood rating and weight appear on one timeline, so patterns are visible.
+
+## Who it is for
+
+- **People managing weight, fasting or nutrition** who want accurate tracking without the typing.
+- **Anyone who finds current trackers too slow** to keep using.
+
+## Why it is different
+
+- **Voice-first logging.** Several meals in one sentence, brand names, and portions of home-cooked batches.
+- **A review step before saving.** Estimates are shown in an editable table, so the user stays in control.
+- **Mood, food and body in one view.** Calendar, insights and heatmaps show the relationship over time.
+- **Works offline and as a guest.** Sign-in adds sync across devices; it never gates features.
+- **Resilient AI.** If the primary model is busy, the app falls back to other models and queues meals to retry later.
+- **Private by design.** Row-level security on every table; AI keys never reach the browser.
 
 ## Features
 
 | Area | What you get |
 | --- | --- |
-| **Log** | Eight meal buckets, eating-window and fasting clock, hydration, expenditure, GYR rating, nibbles, live calorie gauge and targets |
-| **AI parsing** | Voice (Web Speech API) or text. Handles several meals in one sentence, brands, and portions of cooked batches. Review and edit in a confirmation table before saving |
-| **Meal Plan** | Plan today or future days in one sentence, whole-day macro and micro profile, cooked-batch stock with portion tracking |
-| **Calendar** | Monthly grid coloured by your GYR rating, with per-day editing |
-| **Insights** | Trend charts with data-driven axes, GitHub-style GYR and nibbles heatmaps |
-| **Nutrient breakdown** | Full macro and micronutrient profile versus recommended daily amounts, with collapsible "doing well / can improve / needs work" insights |
-| **Weight and BMI** | Weight history, goal line, BMI progress chart |
-| **Settings** | Profile (DOB, height, weight, activity), live BMI, BMR (Mifflin-St Jeor) and TDEE, light/dark theme |
-| **Recipes and Guide** | Fully editable modules, items and FAQs: add, rename and delete anything |
-| **Sync** | Google sign-in; all data, including unsubmitted drafts, syncs across devices |
+| **Log** | Meal buckets, eating window, fasting clock, hydration, daily mood rating, live calorie targets |
+| **AI parsing** | Voice or text, with a confirmation table before saving |
+| **Meal plan** | Plan future days in a sentence; whole-day nutrient profile |
+| **Insights** | Trend charts, calendar and heatmaps coloured by mood |
+| **Nutrients** | Macro and micronutrient profile against recommended daily amounts |
+| **Weight and BMI** | History, goal line and progress |
+| **Sync** | Google sign-in; data syncs across devices |
 
-## Architecture
+## Built with
 
-```
-Browser (Next.js App Router, React 18)
- ├─ Zustand stores ── persisted to localStorage (guest mode / offline cache)
- │        └─ debounced sync ──► Supabase Postgres (RLS: each user sees only their rows)
- ├─ Web Speech API ──► transcript
- └─ /api/parse-food (server route) ──► Gemini  (API key never reaches the client)
-```
-
-Key design decisions:
-
-- **Local-first.** State lives in Zustand and is persisted locally, so the app works instantly and as a guest. Signing in adds cloud sync rather than gating features.
-- **Draft sync.** The current day's form is pushed to a `daily_drafts` table (debounced) and pulled on a timer and on tab focus. Conflicts resolve last-write-wins by `updatedAt`. Submitting writes the final record.
-- **Security by default.** Row Level Security on every table; the Gemini key is used only in a server route.
-- **Resilient AI calls.** The parse route tries a primary Gemini model and falls back to others, with retry on 429/503, and returns validated JSON.
-- **Derived, not stored.** Age, BMI, BMR, TDEE and targets are computed from the profile so they update instantly everywhere.
-
-## Tech stack
-
-| Tool | Why |
-| --- | --- |
-| Next.js 14 (App Router) + TypeScript | Server routes for the AI proxy, type safety across the data model |
-| Tailwind CSS | Design tokens through CSS variables give light/dark theming with little code |
-| Framer Motion | Smooth transitions and micro-interactions |
-| Recharts | Composable, responsive charts |
-| Zustand | Small, fast state with built-in persistence |
-| Supabase | Postgres, Google OAuth and RLS without running a backend |
-| Google Gemini | Natural-language to structured nutrition JSON |
-| Lucide | Consistent icon set |
+Next.js 14 and TypeScript, Tailwind CSS, Zustand, Supabase (Postgres, Google auth, RLS), Google Gemini with an optional backup AI provider.
 
 ## Getting started
 
@@ -77,10 +67,12 @@ npm run dev                  # http://localhost:3000
 | `NEXT_PUBLIC_SUPABASE_URL` | Supabase project URL |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase anon key |
 | `GEMINI_API_KEY` | Google AI Studio key (server-side only) |
-| `GEMINI_MODEL` | Primary model, e.g. `gemini-3.5-flash-lite` |
-| `GEMINI_FALLBACK_MODELS` | Comma-separated fallbacks |
+| `GEMINI_MODEL` | Primary Gemini model |
+| `GEMINI_FALLBACK_MODELS` | Comma-separated Gemini fallbacks |
+| `GROQ_API_KEY` | Optional backup AI key (server-side only) |
+| `GROQ_MODELS` | Optional, comma-separated backup models, tried in order |
 
-Without Supabase the app runs as a guest and stores data in the browser.
+Without Supabase, the app runs as a guest and stores data in the browser.
 
 ### Supabase setup
 
@@ -95,29 +87,18 @@ Without Supabase the app runs as a guest and stores data in the browser.
 | `npm run dev` | Start the dev server |
 | `npm run typecheck` | Type-check the project |
 | `npm run build` | Production build |
-| `npm start` | Serve the production build |
 
 ## Deployment
 
 Connect the repo to Netlify (config in `netlify.toml`) and add the environment variables above.
 
-## Project structure
-
-```
-src/
- ├─ app/            routes, layout, API route (parse-food)
- ├─ components/     views (Log, Plan, Calendar, Insights...), shared UI
- └─ lib/            stores, Supabase client, calculations, nutrient data
-supabase/schema.sql database schema and RLS policies
-```
-
 ## Roadmap
 
-- Realtime sync via Supabase channels instead of polling
+- Realtime sync instead of polling
 - Barcode scanning
-- Data export (CSV)
+- CSV export
 - Installable PWA
 
 ## Disclaimer
 
-Nutrition values are AI estimates and the app is not medical advice.
+Nutrition values are AI estimates. This app is not medical advice.
