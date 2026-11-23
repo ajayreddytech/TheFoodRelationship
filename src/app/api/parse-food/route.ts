@@ -94,7 +94,12 @@ interface Body {
 
 export async function POST(req: Request) {
   const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) return json("GEMINI_API_KEY is not configured on the server.", 503);
+  // Backup AI: Groq (console.groq.com), used only when Gemini cannot answer (see askGroq below).
+  const groqKey = process.env.GROQ_API_KEY;
+  // Tried in order; a retired or busy model just moves on to the next. Override with GROQ_MODELS (comma-separated).
+  const groqModels = (process.env.GROQ_MODELS || "openai/gpt-oss-120b,openai/gpt-oss-20b,qwen/qwen3.8-27b").split(",").map((s) => s.trim()).filter(Boolean);
+  const useGroq = !!groqKey;
+  if (!apiKey && !useGroq) return json("No AI service is configured on the server.", 503);
 
   let body: Body;
   try {
@@ -118,8 +123,9 @@ export async function POST(req: Request) {
   const hour = typeof body.hour === "number" ? body.hour : new Date().getHours();
   const batches = Array.isArray(body.batches) && mode !== "correct" ? body.batches.filter((b) => mode === "cook" || mode === "auto" || b.remaining > 0).slice(0, 20) : [];
 
+  const prefix = `Current local hour: ${hour}\nToday: ${todayStr} (${weekday})\n${batches.length ? `cooked_batches: ${JSON.stringify(batches)}\n` : ""}${currentJson ? `current: ${currentJson}\n` : ""}`;
   const parts: Record<string, unknown>[] = [
-    { text: `Current local hour: ${hour}\nToday: ${todayStr} (${weekday})\n${batches.length ? `cooked_batches: ${JSON.stringify(batches)}\n` : ""}${currentJson ? `current: ${currentJson}\n` : ""}${text ? `User said: ${text}` : "The user's request is in the attached audio."}` },
+    { text: `${prefix}${text ? `User said: ${text}` : "The user's request is in the attached audio."}` },
   ];
   if (audioData) parts.push({ inlineData: { mimeType: audioMime, data: audioData } });
 
@@ -136,22 +142,29 @@ export async function POST(req: Request) {
   const models = [primary, ...(process.env.GEMINI_FALLBACK_MODELS ?? "gemini-3.5-flash-lite").split(",").map((s) => s.trim()).filter(Boolean)]
     .filter((m, i, a) => a.indexOf(m) === i);
 
-  const ask = async (): Promise<Response | null> => {
-    let res: Response | null = null;
+  // With the Groq backup configured, give each Gemini call less time so the backup still fits in the 60 s function limit.
+  const geminiTimeout = useGroq ? 25000 : 40000;
+
+  type Gemini = { kind: "ok"; res: Response } | { kind: "timeout" } | { kind: "http"; status: number };
+  const askGemini = async (): Promise<Gemini> => {
+    if (!apiKey) return { kind: "http", status: 503 };
+    let last: Gemini = { kind: "timeout" };
     outer: for (const model of models) {
       for (let attempt = 0; attempt < 2; attempt++) {
+        let res: Response;
         try {
           res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
             method: "POST",
             headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
             body: payload,
-            signal: AbortSignal.timeout(40000),
+            signal: AbortSignal.timeout(geminiTimeout),
           });
         } catch {
-          res = null;
+          last = { kind: "timeout" };
           continue outer;
         }
-        if (res.ok) break outer;
+        if (res.ok) return { kind: "ok", res };
+        last = { kind: "http", status: res.status };
         if (res.status === 503 || res.status === 429) {
           await new Promise((r) => setTimeout(r, 300 * (attempt + 1)));
           continue;
@@ -159,23 +172,74 @@ export async function POST(req: Request) {
         continue outer; // 404 / 400 etc: try next model
       }
     }
-    return res;
+    return last;
+  };
+
+  // Groq backup (OpenAI-compatible). Its chat API takes text, so audio is transcribed with Whisper on Groq first,
+  // then the same JSON prompt goes to the Groq chat model. Returns the parsed object, or null if Groq also fails.
+  const askGroq = async (audio: { mimeType: string; data: string } | null): Promise<any | null> => {
+    try {
+      let spoken = `${prefix}${text ? `User said: ${text}` : "The user's request is in the attached audio."}`;
+      if (audio) {
+        const form = new FormData();
+        form.append("model", "whisper-large-v3-turbo");
+        form.append("response_format", "json");
+        form.append("file", new Blob([Buffer.from(audio.data, "base64")], { type: audio.mimeType }), "recording.wav");
+        const stt = await fetch("https://api.groq.com/openai/v1/audio/transcriptions", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${groqKey}` },
+          body: form,
+          signal: AbortSignal.timeout(30000),
+        });
+        if (!stt.ok) return null;
+        const transcript = (await stt.json())?.text;
+        if (typeof transcript !== "string" || !transcript.trim()) return null;
+        spoken = `${prefix}User said: ${transcript.trim()}`;
+      }
+      for (const model of groqModels) {
+        const chat = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${groqKey}` },
+          body: JSON.stringify({
+            model,
+            messages: [{ role: "system", content: system }, { role: "user", content: spoken }],
+            temperature: 0.2,
+            response_format: { type: "json_object" },
+          }),
+          signal: AbortSignal.timeout(30000),
+        });
+        if (!chat.ok) continue; // retired, unavailable or busy: try the next model
+        const reply = (await chat.json())?.choices?.[0]?.message?.content;
+        if (typeof reply !== "string") continue;
+        try { return extractJson(reply); } catch { continue; }
+      }
+      return null;
+    } catch {
+      return null;
+    }
   };
 
   // A reply that isn't valid JSON is retried once with a fresh call before the user sees an error.
+  // Gemini first (it hears the audio directly). Groq answers only when Gemini is unreachable, busy, or returns unusable JSON.
   let raw: any = null;
+  let failure: Exclude<Gemini, { kind: "ok" }> | null = null;
   for (let attempt = 0; attempt < 2 && raw == null; attempt++) {
-    const res = await ask();
-    if (!res) return json("The AI service timed out. Please try again.", 504);
-    if (!res.ok) return json(res.status === 503 || res.status === 429 ? "The AI service is busy right now. Please try again in a moment." : `Gemini request failed (${res.status}).`, 502);
+    const g = await askGemini();
+    if (g.kind !== "ok") { failure = g; break; }
+    failure = null;
     try {
-      const data = await res.json();
+      const data = await g.res.json();
       raw = extractJson(data?.candidates?.[0]?.content?.parts?.[0]?.text ?? "");
     } catch {
       raw = null;
     }
   }
-  if (raw == null) return json("Could not understand the AI response. Please try again.", 502);
+  if (raw == null && useGroq) raw = await askGroq(audioData ? { mimeType: audioMime, data: audioData } : null);
+  if (raw == null) {
+    if (failure?.kind === "timeout") return json("The AI service timed out. Please try again.", 504);
+    if (failure?.kind === "http") return json(failure.status === 503 || failure.status === 429 ? "The AI service is busy right now. Please try again in a moment." : `Gemini request failed (${failure.status}).`, 502);
+    return json("Could not understand the AI response. Please try again.", 502);
+  }
 
   try {
     const transcript = typeof raw?.transcript === "string" ? raw.transcript.slice(0, 2000) : text;
