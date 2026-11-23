@@ -117,3 +117,29 @@ grant select, insert, update, delete on public.users_profile, public.daily_logs,
 
 -- Theme/palette preferences synced across devices
 alter table public.users_profile add column if not exists prefs jsonb default '{}'::jsonb;
+
+-- Meals whose AI request could not be reached. Retried by the server (see pending_retry.sql) until they
+-- succeed; the owner confirms or discards them, and the audio is cleared once the AI has read it.
+create table if not exists public.pending_meals (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  created_at timestamptz not null default now(),
+  log_date date not null,
+  hour int not null,
+  text text,
+  audio_mime text,
+  audio_b64 text,
+  batches jsonb not null default '[]'::jsonb,
+  status text not null default 'waiting' check (status in ('waiting','ready','failed')),
+  attempts int not null default 0,
+  next_try_at timestamptz,
+  locked_until timestamptz,
+  last_error text,
+  result jsonb
+);
+create index if not exists pending_meals_due on public.pending_meals (status, next_try_at);
+alter table public.pending_meals enable row level security;
+drop policy if exists "own pending" on public.pending_meals;
+create policy "own pending" on public.pending_meals for all
+  using (auth.uid() = user_id) with check (auth.uid() = user_id);
+grant select, insert, update, delete on public.pending_meals to authenticated;

@@ -24,11 +24,13 @@ interface Props {
   date?: string;
   onClose: () => void;
   onConfirm: (blocks: MealBlock[], date: string) => void;
+  /** Optional explanation shown above the table (e.g. for an entry recovered after a failed attempt). */
+  note?: string;
 }
 
 const BLANK: FoodItem = { name: "", quantity: "1 serving", calories: 0, macros: { protein_g: 0, carbs_g: 0, fat_g: 0, fiber_g: 0 }, micros: {} };
 
-export function MealsModal({ open, mode, blocks: initial, transcript: t0, date: d0, onClose, onConfirm }: Props) {
+export function MealsModal({ open, mode, blocks: initial, transcript: t0, date: d0, onClose, onConfirm, note }: Props) {
   const [blocks, setBlocks] = useState<MealBlock[]>([]);
   const [date, setDate] = useState(todayISO());
   const [transcript, setTranscript] = useState<string | undefined>();
@@ -78,6 +80,7 @@ export function MealsModal({ open, mode, blocks: initial, transcript: t0, date: 
           {respeak.recording ? `Stop (${respeak.seconds}s)` : "Re-speak"}
         </button>
       </div>
+      {note && <p className="mb-3 rounded-lg border border-mid/50 bg-mid/10 px-3 py-2 text-sm">{note}</p>}
       {transcript && <p className="mb-3 rounded-lg bg-muted px-3 py-1.5 text-xs italic text-subtle">“{transcript}”</p>}
       {(err || respeak.error) && <p role="alert" className="mb-2 text-sm text-bad">{err ?? respeak.error}</p>}
 

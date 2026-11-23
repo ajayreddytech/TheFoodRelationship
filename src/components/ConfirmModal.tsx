@@ -13,11 +13,13 @@ interface Props {
   parsed: ParsedFood | null;
   onClose: () => void;
   onConfirm: (bucket: MealBucket, items: FoodItem[], batch?: { id: string; fraction: number }) => void;
+  /** Optional explanation shown above the table (e.g. for an entry recovered after a failed attempt). */
+  note?: string;
 }
 
 const BLANK: FoodItem = { name: "", quantity: "1 serving", calories: 0, macros: { protein_g: 0, carbs_g: 0, fat_g: 0, fiber_g: 0 }, micros: {} };
 
-export function ConfirmModal({ parsed, onClose, onConfirm }: Props) {
+export function ConfirmModal({ parsed, onClose, onConfirm, note }: Props) {
   const [bucket, setBucket] = useState<MealBucket>("Breakfast");
   const [items, setItems] = useState<FoodItem[]>([]);
   const [batch, setBatch] = useState<ParsedFood["batch"]>();
@@ -78,6 +80,7 @@ export function ConfirmModal({ parsed, onClose, onConfirm }: Props) {
           {respeak.recording ? `Stop (${respeak.seconds}s)` : "Re-speak"}
         </button>
       </div>
+      {note && <p className="mb-2 rounded-lg border border-mid/50 bg-mid/10 px-3 py-2 text-sm">{note}</p>}
       {transcript && <p className="mb-2 rounded-lg bg-muted px-3 py-1.5 text-xs italic text-subtle">“{transcript}”</p>}
       {batch && <p className="mb-2 text-xs text-brand">Portion of your cooked batch — it will be deducted from what&apos;s left.</p>}
       {(err || respeak.error) && <p role="alert" className="mb-2 text-sm text-bad">{err ?? respeak.error}</p>}

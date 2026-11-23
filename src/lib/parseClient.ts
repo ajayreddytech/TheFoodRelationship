@@ -61,8 +61,10 @@ export interface CorrectionResult extends CorrectionContext { transcript?: strin
 /** Reads a route reply. A non-JSON body (e.g. a gateway error page) becomes a readable message instead of a parse crash. */
 async function readReply(res: Response): Promise<any> {
   const data = await res.json().catch(() => null);
-  if (!data) throw new Error(res.ok ? "The AI response was unreadable. Please try again." : `The server couldn't process that (HTTP ${res.status}). Please try again.`);
-  if (!res.ok) throw new Error(data.error ?? "Could not parse that.");
+  // Busy / timeout / gateway / unreadable replies are worth retrying later; a 422 ("no food found") is not.
+  const busy = [429, 502, 503, 504].includes(res.status);
+  if (!data) throw Object.assign(new Error(res.ok ? "The AI response was unreadable. Please try again." : `The server couldn't process that (HTTP ${res.status}). Please try again.`), { retryable: true });
+  if (!res.ok) throw Object.assign(new Error(data.error ?? "Could not parse that."), { retryable: busy });
   return data;
 }
 
@@ -119,20 +121,24 @@ export async function correctInput(audio: RecordedAudio, ctx: CorrectionContext,
   };
 }
 
-export async function parseInput(input: { text?: string; audio?: RecordedAudio; mode: ParseMode }): Promise<ParseResult> {
+/** `when` is the moment the food was spoken (defaults to now); it sets the meal-time guess for saved entries retried later. */
+export async function parseInput(input: { text?: string; audio?: RecordedAudio; mode: ParseMode }, when: Date = new Date()): Promise<ParseResult> {
   const batches = useStore.getState().batches.map((b) => ({ id: b.id, name: b.name, cooked_weight_g: b.cookedWeightG, remaining: b.remaining, ingredients: b.ingredients.map((i) => i.name) }));
   let res: Response;
   try {
     res = await fetch("/api/parse-food", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ...input, hour: new Date().getHours(), today: todayISO(), batches }),
+      body: JSON.stringify({ ...input, hour: when.getHours(), today: todayISO(), batches }),
     });
   } catch {
-    throw new Error("You appear to be offline. Check your connection and try again.");
+    throw Object.assign(new Error("You appear to be offline. Check your connection and try again."), { retryable: true });
   }
-  const data = await readReply(res);
+  return toParseResult(await readReply(res), when);
+}
 
+/** Turns a /api/parse-food reply into what the screens use. Also used for saved entries the server retried. */
+export function toParseResult(data: any, when: Date = new Date()): ParseResult {
   if (data.kind === "cook_update") {
     const b = useStore.getState().batches.find((x) => x.id === data.batch_id);
     if (!b) throw new Error("That cooked batch no longer exists.");
@@ -144,10 +150,10 @@ export async function parseInput(input: { text?: string; audio?: RecordedAudio; 
     return { kind: "cook", draft: { name: data.name, cookedWeightG: data.cooked_weight_g, servings: data.servings, items: data.items, transcript: data.transcript } };
   }
   const toBlocks = (): ParsedFood[] =>
-    (data.meals as { target_bucket: MealBucket | null; items: FoodItem[] }[]).map((m) => ({ target_bucket: m.target_bucket ?? guessBucket(), items: m.items, transcript: data.transcript }));
+    (data.meals as { target_bucket: MealBucket | null; items: FoodItem[] }[]).map((m) => ({ target_bucket: m.target_bucket ?? guessBucket(when), items: m.items, transcript: data.transcript }));
   if (data.kind === "plan") return { kind: "plan", date: data.target_date, meals: toBlocks(), transcript: data.transcript };
   if (data.kind === "meals") return { kind: "meals", meals: toBlocks(), transcript: data.transcript };
-  const bucket: MealBucket = data.target_bucket ?? guessBucket();
+  const bucket: MealBucket = data.target_bucket ?? guessBucket(when);
   if (data.kind === "portion") {
     const p = portionItem(data.batch_id, data.fraction);
     if (!p) throw new Error("That cooked batch no longer exists.");

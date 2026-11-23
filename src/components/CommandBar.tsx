@@ -3,6 +3,8 @@
 import { useState } from "react";
 import { CalendarCheck, ChefHat, Loader2, Mic, Send, Sparkles, Square, Utensils } from "lucide-react";
 import { ParseMode, ParseResult, parseInput } from "@/lib/parseClient";
+import { enqueuePending, isRetryable } from "@/lib/pendingMeals";
+import { useStore } from "@/lib/store";
 import { useRecorder } from "@/lib/useRecorder";
 
 const META: Record<ParseMode, { label: string; Icon: typeof Utensils; placeholder: string }> = {
@@ -18,13 +20,24 @@ export function CommandBar({ modes, onResult }: { modes: ParseMode[]; onResult: 
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const selectedDate = useStore((st) => st.selectedDate);
+  const uid = useStore((st) => st.userId);
+
+  /** Keeps a meal the AI could not be reached for (in the cloud, so every device sees it). Needs sign-in. */
+  const keepForLater = async (input: { text?: string; audio?: Parameters<typeof parseInput>[0]["audio"] }) => {
+    if (!uid) return false;
+    return enqueuePending(uid, { text: input.text || undefined, audio: input.audio, logDate: selectedDate, hour: new Date().getHours() });
+  };
 
   const handle = async (input: { text?: string; audio?: Parameters<typeof parseInput>[0]["audio"] }) => {
     setBusy(true); setErr(null);
     try {
       onResult(await parseInput({ ...input, mode }), mode);
       setText("");
-    } catch (e) { setErr(e instanceof Error ? e.message : "Something went wrong."); }
+    } catch (e) {
+      if (mode === "meal" && isRetryable(e) && (await keepForLater(input))) setText("");
+      else setErr(e instanceof Error ? e.message : "Something went wrong.");
+    }
     setBusy(false);
   };
   const rec = useRecorder((audio) => handle({ audio }));

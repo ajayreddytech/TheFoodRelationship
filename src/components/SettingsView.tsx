@@ -104,6 +104,19 @@ export function SettingsView() {
       </section>
 
       <section className="card space-y-3">
+        <h2 className="font-semibold">{toTitleCase("Tracking")}</h2>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <div className="font-medium">No Nibbles</div>
+            <p className="text-sm text-subtle">Shows the No Nibbles input in the log and its entries in the calendar and insights. Off hides it everywhere; saved data is kept.</p>
+          </div>
+          <button aria-pressed={s.showNibbles} onClick={() => s.setShowNibbles(!s.showNibbles)} className={`btn-ghost ${s.showNibbles ? "ring-2 ring-fg" : ""}`}>
+            {s.showNibbles ? "On" : "Off"}
+          </button>
+        </div>
+      </section>
+
+      <section className="card space-y-3">
         <h2 className="font-semibold">{toTitleCase("Modules")}</h2>
         <p className="text-sm text-subtle">Add, rename or delete the sections shown in Recipes and Guide.</p>
         <div className="space-y-3">

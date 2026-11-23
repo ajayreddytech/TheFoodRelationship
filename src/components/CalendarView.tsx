@@ -14,7 +14,7 @@ import { GYR_STYLE, METRICS, MetricIcon, NibbleMark } from "./icons";
 const CELL = { green: "bg-good/55 border-good/60", yellow: "bg-mid/55 border-mid/60", red: "bg-bad/55 border-bad/60" } as const;
 const DOW = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
-function Stats({ log, size, labels }: { log: DailyLog; size: number; labels?: boolean }) {
+function Stats({ log, size, labels, showNibbles }: { log: DailyLog; size: number; labels?: boolean; showNibbles: boolean }) {
   const fast = dayFastingHours(log);
   const rows = [
     { k: "intake" as const, v: log.meals.length || log.fasted ? fmt(dayIntake(log)) : "–" },
@@ -29,13 +29,13 @@ function Stats({ log, size, labels }: { log: DailyLog; size: number; labels?: bo
           <MetricIcon kind={r.k} size={size} />{labels && <span className="hidden xl:inline">{METRICS[r.k].label}</span>}<span className="hidden sm:inline">{r.v}</span>
         </div>
       ))}
-      <div className="flex items-center gap-1 text-[10px] sm:text-xs"><NibbleMark nibbled={log.nibbles} size={size} /></div>
+      {showNibbles && <div className="flex items-center gap-1 text-[10px] sm:text-xs"><NibbleMark nibbled={log.nibbles} size={size} /></div>}
     </div>
   );
 }
 
 export function CalendarView() {
-  const { logs, selectedDate, setDate, setView, deleteLog } = useStore();
+  const { logs, selectedDate, setDate, setView, deleteLog, showNibbles } = useStore();
   const [sel, setSel] = useState<string | null>(null);
   const [gran, setGran] = useState<Gran>("month");
   const [anchor, setAnchor] = useState(selectedDate);
@@ -64,7 +64,7 @@ export function CalendarView() {
         onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setSel(sel === d ? null : d); } }}
         className={`group relative flex min-h-[4.5rem] cursor-pointer flex-col items-center justify-start gap-1 rounded-xl border-2 p-1 pt-6 transition sm:min-h-[8.5rem] sm:p-2 sm:pt-7 ${activeSel === d ? "!border-brand" : g ? "" : "border-transparent"} ${g && l.gyr ? CELL[l.gyr] + " text-fg" : "bg-muted/30"} ${d > today ? "opacity-60" : ""}`}>
         <span className={`absolute left-2 top-1.5 text-sm font-bold ${g ? "text-fg" : "text-subtle"} ${d === today ? "rounded-full bg-brand px-1.5 !text-white" : ""}`}>{parseISODate(d).getDate()}</span>
-        {has && <Stats log={l} size={13} />}
+        {has && <Stats log={l} size={13} showNibbles={showNibbles} />}
         <div className="absolute right-1 top-1 hidden gap-1 group-hover:flex">
           {has ? (
             <>
@@ -139,7 +139,7 @@ export function CalendarView() {
       {activeSel && (
         <Section title={parseISODate(activeSel).toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric", year: "numeric" })} subtitle={filled ? "Entry exists" : "No entry yet"} icon={<MetricIcon kind="intake" size={18} />}>
           {filled && selLog && (
-            <div className="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-5">
+            <div className={`mb-4 grid grid-cols-2 gap-2 ${showNibbles ? "sm:grid-cols-5" : "sm:grid-cols-4"}`}>
               {[
                 { k: "intake" as const, v: `${fmt(dayIntake(selLog))} kcal` },
                 { k: "expenditure" as const, v: `${fmt(selLog.expenditure)} kcal` },
@@ -148,7 +148,7 @@ export function CalendarView() {
               ].map((r) => (
                 <div key={r.k} className="flex items-center gap-2 rounded-xl bg-muted/50 p-2 text-sm"><MetricIcon kind={r.k} size={18} /><span>{r.v}</span></div>
               ))}
-              <div className="flex items-center gap-2 rounded-xl bg-muted/50 p-2 text-sm"><NibbleMark nibbled={selLog.nibbles} size={18} /><span>{selLog.nibbles == null ? "—" : selLog.nibbles ? "Nibbles" : "No Nibbles"}</span></div>
+              {showNibbles && <div className="flex items-center gap-2 rounded-xl bg-muted/50 p-2 text-sm"><NibbleMark nibbled={selLog.nibbles} size={18} /><span>{selLog.nibbles == null ? "—" : selLog.nibbles ? "Nibbles" : "No Nibbles"}</span></div>}
             </div>
           )}
           <div className="flex flex-col gap-2 sm:flex-row">

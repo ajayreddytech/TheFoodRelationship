@@ -38,6 +38,8 @@ interface State {
   routineChecks: Record<string, string>;
   /** ISO date the current target weight was set. The goal's energy progress counts from here (kept on this device). */
   goalSince: string | null;
+  /** Show the "No Nibbles" tracking throughout the app (off by default; kept on this device). */
+  showNibbles: boolean;
   /** Ids/dates known to exist on the server. A synced item that vanishes remotely was deleted on another device. */
   syncedBatchIds: string[];
   syncedDrafts: string[];
@@ -52,6 +54,7 @@ interface State {
   setDate: (d: string) => void;
   setTheme: (t: Theme) => void;
   setPalette: (p: Palette) => void;
+  setShowNibbles: (v: boolean) => void;
   setProfile: (p: Partial<Profile>) => void;
   getLog: (date: string) => DailyLog;
   patchLog: (date: string, patch: Partial<DailyLog>) => void;
@@ -199,6 +202,7 @@ export const useStore = create<State>()(
       routine: [],
       routineChecks: {},
       goalSince: null,
+      showNibbles: false,
       syncedBatchIds: [],
       syncedDrafts: [],
       syncedWeights: [],
@@ -211,6 +215,7 @@ export const useStore = create<State>()(
       setDate: (selectedDate) => set({ selectedDate }),
       setTheme: (theme) => { set({ theme }); const u = get().userId; if (u) sync(set, () => pushProfile(u, get().profile, prefsOf(get()))); },
       setPalette: (palette) => { set({ palette }); const u = get().userId; if (u) sync(set, () => pushProfile(u, get().profile, prefsOf(get()))); },
+      setShowNibbles: (showNibbles) => set({ showNibbles }),
 
       setProfile: (patch) => {
         const profile = { ...get().profile, ...patch };
@@ -231,9 +236,9 @@ export const useStore = create<State>()(
         set((s) => {
           const cur = s.logs[date] ?? emptyLog(date);
           const entry: MealEntry = { id: uid(), bucket, items };
-          // First meal of today with no clock-in yet: clock in 45 minutes before it was logged.
+          // First meal of today with no clock-in yet: clock in 30 minutes before it was logged.
           const autoClockIn = cur.meals.length === 0 && !cur.firstMealAt && !cur.fasted && date === todayISO();
-          const firstMealAt = autoClockIn ? new Date(Date.now() - 45 * 60_000).toISOString() : cur.firstMealAt;
+          const firstMealAt = autoClockIn ? new Date(Date.now() - 30 * 60_000).toISOString() : cur.firstMealAt;
           return { logs: { ...s.logs, [date]: { ...cur, meals: [...cur.meals, entry], firstMealAt, submitted: false, updatedAt: now() } } };
         });
         queueDraft(set, get, date);
@@ -495,7 +500,7 @@ export const useStore = create<State>()(
       name: "thefoodrelationship-v1",
       partialize: (s) => ({
         theme: s.theme, palette: s.palette, profile: s.profile, logs: s.logs, weights: s.weights, batches: s.batches,
-        routine: s.routine, routineChecks: s.routineChecks, goalSince: s.goalSince,
+        routine: s.routine, routineChecks: s.routineChecks, goalSince: s.goalSince, showNibbles: s.showNibbles,
         syncedBatchIds: s.syncedBatchIds, syncedDrafts: s.syncedDrafts, syncedWeights: s.syncedWeights, deletedBatchIds: s.deletedBatchIds,
       }),
       // Logs saved by older versions lack newer fields.

@@ -19,6 +19,9 @@ import { CommandBar } from "./CommandBar";
 import { NutrientModal } from "./NutrientModal";
 import { useContent } from "@/lib/contentStore";
 import { toTitleCase } from "@/lib/text";
+import { claimPending, PendingMeal } from "@/lib/pendingMeals";
+import { ParseResult, toParseResult } from "@/lib/parseClient";
+import { PendingMeals, recoveredNote } from "./PendingMeals";
 
 
 const QUOTES = [
@@ -97,6 +100,8 @@ export function LogView() {
   const [multi, setMulti] = useState<{ blocks: ParsedFood[]; transcript?: string } | null>(null);
   const [saved, setSaved] = useState(false);
   const [planProfile, setPlanProfile] = useState(false);
+  /** A saved entry (kept on this device) being confirmed; it is removed only once confirmed. */
+  const [pendingReview, setPendingReview] = useState<PendingMeal | null>(null);
 
   const planItems = useContent((st) => st.plans[todayISO()]) ?? [];
   const planCal = planItems.reduce((a, i) => a + i.calories, 0);
@@ -108,12 +113,38 @@ export function LogView() {
   const fastH = dayFastingHours(log);
   const eating = fastingStats(log.firstMealAt, log.lastMealAt).eatingH;
 
-  const confirmMeal = (bucket: MealBucket, items: FoodItem[], batch?: { id: string; fraction: number }) => {
+  /** For a saved entry: takes it from the cloud before logging, so the same entry cannot be logged twice from two devices. */
+  const claimFirst = async (): Promise<boolean> => {
+    if (!pendingReview) return true;
+    try {
+      if (await claimPending(pendingReview.id)) return true;
+      window.alert("This entry was already logged from another device.");
+    } catch {
+      window.alert("Couldn't reach the server to confirm this entry. Check your connection and try again.");
+      return false;
+    }
+    setParsed(null); setMulti(null); setPendingReview(null);
+    return false;
+  };
+
+  const confirmMeal = async (bucket: MealBucket, items: FoodItem[], batch?: { id: string; fraction: number }) => {
+    if (!(await claimFirst())) return;
     const tagged = batch ? items.map((it) => (it.name.endsWith("(portion)") ? { ...it, batch } : it)) : items;
     if (parsed?.editId) s.updateMeal(date, parsed.editId, bucket, tagged);
     else s.addMeal(date, bucket, tagged);
     if (batch && !parsed?.editId) s.consumeBatch(batch.id, batch.fraction);
     setParsed(null);
+    setPendingReview(null);
+  };
+
+  const reviewPending = (p: PendingMeal) => {
+    if (!p.result) return;
+    let result: ParseResult;
+    try { result = toParseResult(p.result, new Date(p.createdAt)); } catch { return; }
+    if (p.logDate !== date) s.setDate(p.logDate);
+    setPendingReview(p);
+    if (result.kind === "meal") setParsed(result.parsed);
+    else if (result.kind === "meals") setMulti({ blocks: result.meals, transcript: result.transcript });
   };
 
   const clock = (which: "firstMealAt" | "lastMealAt") => {
@@ -172,6 +203,7 @@ export function LogView() {
         </Section>
         <NutrientModal kind={planProfile ? "all" : null} subtitle="Today's meal plan · whole day" items={planItems} calories={planCal} onClose={() => setPlanProfile(false)} />
       </div>
+      <PendingMeals canAutoOpen={!parsed && !multi && !pendingReview} onReview={reviewPending} />
       {/* Meals: two columns, filled top to bottom */}
       <Section title="Meals" subtitle="Tap the mic or type below — meals land in the right bucket" icon={<Utensils size={18} />}>
         <div className="grid grid-cols-1 items-start gap-3 sm:grid-cols-2">
@@ -219,14 +251,16 @@ export function LogView() {
               <span className="min-w-[4rem] text-center text-xl font-bold tabular-nums">{log.hydrationL.toFixed(1)} L</span>
               <button aria-label="More water" className="btn-ghost !px-3" onClick={() => s.patchLog(date, { hydrationL: +(log.hydrationL + 0.5).toFixed(1) })}><Plus size={16} /></button>
             </InputRow>
-            <InputRow kind="nibbles" label="No Nibbles">
-              {([false, true] as const).map((nibbled) => (
-                <button key={String(nibbled)} aria-pressed={log.nibbles === nibbled} onClick={() => s.patchLog(date, { nibbles: log.nibbles === nibbled ? null : nibbled })}
-                  className={`flex items-center gap-1 rounded-xl border-2 px-5 py-2 text-sm font-semibold ${log.nibbles === nibbled ? (nibbled ? "border-transparent bg-bad text-white" : "border-transparent bg-good text-white") : "border-line"}`}>
-                  {nibbled ? <X size={14} /> : <Check size={14} />}{nibbled ? "No" : "Yes"}
-                </button>
-              ))}
-            </InputRow>
+            {s.showNibbles && (
+              <InputRow kind="nibbles" label="No Nibbles">
+                {([false, true] as const).map((nibbled) => (
+                  <button key={String(nibbled)} aria-pressed={log.nibbles === nibbled} onClick={() => s.patchLog(date, { nibbles: log.nibbles === nibbled ? null : nibbled })}
+                    className={`flex items-center gap-1 rounded-xl border-2 px-5 py-2 text-sm font-semibold ${log.nibbles === nibbled ? (nibbled ? "border-transparent bg-bad text-white" : "border-transparent bg-good text-white") : "border-line"}`}>
+                    {nibbled ? <X size={14} /> : <Check size={14} />}{nibbled ? "No" : "Yes"}
+                  </button>
+                ))}
+              </InputRow>
+            )}
             <InputRow kind="gyr" label="GYR" tone={log.gyr ? GYR_STYLE[log.gyr].text : undefined}>
               <div className="grid w-full grid-cols-3 gap-2 sm:w-96">
                 {(["green", "yellow", "red"] as Gyr[]).map((g) => (
@@ -269,9 +303,10 @@ export function LogView() {
         else if (r.kind === "meal") setParsed(r.parsed);
       }} />
 
-      <MealsModal open={!!multi} mode="meal" blocks={multi?.blocks ?? []} transcript={multi?.transcript} onClose={() => setMulti(null)}
-        onConfirm={(bs) => { for (const b of bs) s.addMeal(date, b.bucket, b.items); setMulti(null); }} />
-      <ConfirmModal parsed={parsed} onClose={() => setParsed(null)} onConfirm={confirmMeal} />
+      <MealsModal open={!!multi} mode="meal" blocks={multi?.blocks ?? []} transcript={multi?.transcript} note={pendingReview ? recoveredNote(pendingReview) : undefined}
+        onClose={() => { setMulti(null); setPendingReview(null); }}
+        onConfirm={async (bs) => { if (!(await claimFirst())) return; for (const b of bs) s.addMeal(date, b.bucket, b.items); setMulti(null); setPendingReview(null); }} />
+      <ConfirmModal parsed={parsed} note={pendingReview ? recoveredNote(pendingReview) : undefined} onClose={() => { setParsed(null); setPendingReview(null); }} onConfirm={confirmMeal} />
     </div>
   );
 }

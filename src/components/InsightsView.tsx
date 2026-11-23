@@ -106,7 +106,7 @@ function Stat({ kind, label, value, sub }: { kind?: MetricKind; label: string; v
 }
 
 export function InsightsView() {
-  const { logs, profile } = useStore();
+  const { logs, profile, showNibbles } = useStore();
   const [gran, setGran] = useState<Gran>("week");
   const [anchor, setAnchor] = useState(todayISO());
   const w = windowFor(gran, anchor, 7);
@@ -115,7 +115,7 @@ export function InsightsView() {
 
   const points = useMemo(() => dayPoints(logs, w.from, w.to), [logs, w.from, w.to]);
   const sum = useMemo(() => summarize(points.filter((p) => p.date <= today)), [points, today]);
-  const tiles = useMemo(() => extraInsights(points.filter((p) => p.date <= today), profile), [points, profile, today]);
+  const tiles = useMemo(() => extraInsights(points.filter((p) => p.date <= today), profile).filter((t) => showNibbles || t.id !== "nibstreak"), [points, profile, today, showNibbles]);
   const pctOf = (n: number, t: number) => (t ? `${Math.round((n / t) * 100)}%` : "—");
   const days = (n: number | null, d = 0, u = "") => (n == null ? "—" : `${fmt(n, d)}${u}`);
 
@@ -132,7 +132,7 @@ export function InsightsView() {
         <Stat label="Avg Green (Satvik)" value={pctOf(sum.gyr.green, sum.gyrTotal)} sub={`${sum.gyr.green} days`} />
         <Stat label="Avg Yellow" value={pctOf(sum.gyr.yellow, sum.gyrTotal)} sub={`${sum.gyr.yellow} days`} />
         <Stat label="Avg Red (Tamasik)" value={pctOf(sum.gyr.red, sum.gyrTotal)} sub={`${sum.gyr.red} days`} />
-        <Stat kind="nibbles" label="No-nibble score" value={pctOf(sum.nibblesNo, sum.nibblesTotal)} sub={`${sum.nibblesNo} no-nibble days · ${sum.nibblesYes} with nibbles`} />
+        {showNibbles && <Stat kind="nibbles" label="No-nibble score" value={pctOf(sum.nibblesNo, sum.nibblesTotal)} sub={`${sum.nibblesNo} no-nibble days · ${sum.nibblesYes} with nibbles`} />}
       </div>
       <p className="-mt-3 text-xs text-subtle">Based on {sum.days} logged day(s) up to today in this period.</p>
 
@@ -158,9 +158,11 @@ export function InsightsView() {
       <Section title="GYR heatmap" subtitle="Satvik · In between · Tamasik" icon={<MetricIcon kind="gyr" size={18} />} className="w-full">
         <div className="flex w-full items-center"><Heatmap kind="gyr" gran={gran} from={hw.from} to={hw.to} points={points} /></div>
       </Section>
-      <Section title="Nibbles heatmap" subtitle="Green check = No Nibbles · Red cross = nibbles" icon={<MetricIcon kind="nibbles" size={18} />} className="w-full">
-        <div className="flex w-full items-center"><Heatmap kind="nibbles" gran={gran} from={hw.from} to={hw.to} points={points} /></div>
-      </Section>
+      {showNibbles && (
+        <Section title="Nibbles heatmap" subtitle="Green check = No Nibbles · Red cross = nibbles" icon={<MetricIcon kind="nibbles" size={18} />} className="w-full">
+          <div className="flex w-full items-center"><Heatmap kind="nibbles" gran={gran} from={hw.from} to={hw.to} points={points} /></div>
+        </Section>
+      )}
     </div>
   );
 }
